@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Grant Access - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-shield-check"></i> Grant Access Policy</h2>
+    <a href="{{ url_for('policies.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-10 offset-md-1">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('policies.add') }}" id="policyForm">
+                    <h5 class="mb-3">1. Select User</h5>
+                    
+                    <div class="mb-3">
+                        <label for="user_id" class="form-label">User <span class="required">*</span></label>
+                        <select class="form-select" id="user_id" name="user_id" required onchange="loadUserIPs()">
+                            <option value="">Select a user...</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}" {{ 'selected' if request.args.get('user_id') == user.id|string }}>
+                                {{ user.username }} ({{ user.email or 'no email' }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="source_ip_id" class="form-label">Source IP</label>
+                        <select class="form-select" id="source_ip_id" name="source_ip_id">
+                            <option value="">ANY (all source IPs)</option>
+                        </select>
+                        <small class="form-text text-muted">Leave as ANY or select specific source IP</small>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h5 class="mb-3">2. Select Scope</h5>
+                    
+                    <div class="mb-3">
+                        <label for="scope_type" class="form-label">Scope Type <span class="required">*</span></label>
+                        <select class="form-select" id="scope_type" name="scope_type" required onchange="toggleScopeFields()">
+                            <option value="">Select scope type...</option>
+                            <option value="group">Server Group (all servers in group)</option>
+                            <option value="server">Single Server</option>
+                            <option value="service">Single Service (server + protocol)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="groupField" style="display: none;">
+                        <label for="target_group_id" class="form-label">Server Group <span class="required">*</span></label>
+                        <select class="form-select" id="target_group_id" name="target_group_id">
+                            <option value="">Select a group...</option>
+                            {% for group in groups %}
+                            <option value="{{ group.id }}">{{ group.name }} ({{ group.members|length }} servers)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="serverField" style="display: none;">
+                        <label for="target_server_id" class="form-label">Server <span class="required">*</span></label>
+                        <select class="form-select" id="target_server_id" name="target_server_id">
+                            <option value="">Select a server...</option>
+                            {% for server in servers %}
+                            <option value="{{ server.id }}">{{ server.name }} ({{ server.ip_address }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="protocolField" style="display: none;">
+                        <label for="protocol" class="form-label">Protocol <span class="required">*</span></label>
+                        <select class="form-select" id="protocol" name="protocol">
+                            <option value="">ALL protocols</option>
+                            <option value="ssh">SSH only</option>
+                            <option value="rdp">RDP only</option>
+                        </select>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h5 class="mb-3">3. SSH Configuration (Optional)</h5>
+                    
+                    <div class="mb-3">
+                        <label for="ssh_logins" class="form-label">Allowed SSH Logins</label>
+                        <input type="text" class="form-control" id="ssh_logins" name="ssh_logins" 
+                               placeholder="root,admin,ubuntu">
+                        <small class="form-text text-muted">
+                            Comma-separated list of allowed SSH usernames. Leave empty for no restrictions.
+                        </small>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h5 class="mb-3">4. Time Configuration</h5>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="start_time" class="form-label">Start Time</label>
+                            <input type="datetime-local" class="form-control" id="start_time" name="start_time">
+                            <small class="form-text text-muted">Leave empty for immediate access</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="duration_hours" class="form-label">Duration (hours)</label>
+                            <input type="number" class="form-control" id="duration_hours" name="duration_hours" 
+                                   min="1" placeholder="24">
+                            <small class="form-text text-muted">Leave empty for permanent access</small>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('policies.index') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Grant Access
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Already in app.js, but include inline for clarity
+function toggleScopeFields() {
+    const scopeType = document.getElementById('scope_type').value;
+    const groupField = document.getElementById('groupField');
+    const serverField = document.getElementById('serverField');
+    const protocolField = document.getElementById('protocolField');
+    
+    groupField.style.display = scopeType === 'group' ? 'block' : 'none';
+    serverField.style.display = (scopeType === 'server' || scopeType === 'service') ? 'block' : 'none';
+    protocolField.style.display = (scopeType === 'service') ? 'block' : 'none';
+    
+    // Clear fields when hidden
+    if (scopeType !== 'group') document.getElementById('target_group_id').value = '';
+    if (scopeType !== 'server' && scopeType !== 'service') document.getElementById('target_server_id').value = '';
+    if (scopeType !== 'service') document.getElementById('protocol').value = '';
+}
+
+function loadUserIPs() {
+    const userId = document.getElementById('user_id').value;
+    const ipSelect = document.getElementById('source_ip_id');
+    
+    if (!userId) {
+        ipSelect.innerHTML = '<option value="">ANY (all source IPs)</option>';
+        return;
+    }
+    
+    fetch(`/policies/api/user/${userId}/ips`)
+        .then(response => response.json())
+        .then(data => {
+            ipSelect.innerHTML = '<option value="">ANY (all source IPs)</option>';
+            data.ips.forEach(ip => {
+                const option = document.createElement('option');
+                option.value = ip.id;
+                option.textContent = ip.ip + (ip.label ? ` (${ip.label})` : '');
+                ipSelect.appendChild(option);
+            });
+        })
+        .catch(error => console.error('Error loading IPs:', error));
+}
+
+// Auto-load user IPs if user is pre-selected from URL parameter
+document.addEventListener('DOMContentLoaded', function() {
+    const userSelect = document.getElementById('user_id');
+    if (userSelect && userSelect.value) {
+        loadUserIPs();
+    }
+});
+</script>
+{% endblock %}

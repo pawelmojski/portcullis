@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block title %}Audit Log - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-list-ul"></i> Audit Log</h2>
+    <a href="{{ url_for('monitoring.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('monitoring.audit') }}" class="row g-3">
+            <div class="col-md-3">
+                <label for="action" class="form-label">Action</label>
+                <select class="form-select" id="action" name="action">
+                    <option value="">All actions</option>
+                    <option value="access_granted" {{ 'selected' if request.args.get('action') == 'access_granted' }}>
+                        Access Granted
+                    </option>
+                    <option value="access_denied" {{ 'selected' if request.args.get('action') == 'access_denied' }}>
+                        Access Denied
+                    </option>
+                    <option value="connection_closed" {{ 'selected' if request.args.get('action') == 'connection_closed' }}>
+                        Connection Closed
+                    </option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="user_id" class="form-label">User</label>
+                <select class="form-select" id="user_id" name="user_id">
+                    <option value="">All users</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {{ 'selected' if request.args.get('user_id') == user.id|string }}>
+                        {{ user.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="date_from" class="form-label">Date From</label>
+                <input type="date" class="form-control" id="date_from" name="date_from" 
+                       value="{{ request.args.get('date_from', '') }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-filter"></i> Apply Filters
+                    </button>
+                    <a href="{{ url_for('monitoring.audit') }}" class="btn btn-secondary">Clear</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Audit Log Table -->
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Action</th>
+                        <th>User</th>
+                        <th>Server</th>
+                        <th>Protocol</th>
+                        <th>Source IP</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.timestamp|datetime }}</td>
+                        <td>
+                            {% if 'granted' in log.action %}
+                                <span class="badge bg-success">{{ log.action }}</span>
+                            {% elif 'denied' in log.action %}
+                                <span class="badge bg-danger">{{ log.action }}</span>
+                            {% elif 'closed' in log.action %}
+                                <span class="badge bg-secondary">{{ log.action }}</span>
+                            {% else %}
+                                <span class="badge bg-info">{{ log.action }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.user %}
+                                <a href="{{ url_for('users.view', user_id=log.user.id) }}">
+                                    {{ log.user.username }}
+                                </a>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.server %}
+                                <a href="{{ url_for('servers.view', server_id=log.server.id) }}">
+                                    {{ log.server.name }}
+                                </a>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if log.protocol %}
+                                <span class="badge bg-info">{{ log.protocol|upper }}</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td><code>{{ log.source_ip or '-' }}</code></td>
+                        <td>
+                            {% if log.details %}
+                                <small class="text-muted">{{ log.details[:100] }}...</small>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No audit log entries found.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <nav aria-label="Audit log pagination">
+            <ul class="pagination justify-content-center">
+                {% if page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('monitoring.audit', page=page-1, **request.args) }}">
+                        Previous
+                    </a>
+                </li>
+                {% endif %}
+                
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ p }}</span>
+                    </li>
+                    {% elif p <= 3 or p > total_pages - 3 or (p >= page - 1 and p <= page + 1) %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('monitoring.audit', page=p, **request.args) }}">
+                            {{ p }}
+                        </a>
+                    </li>
+                    {% elif p == 4 or p == total_pages - 3 %}
+                    <li class="page-item disabled">
+                        <span class="page-link">...</span>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('monitoring.audit', page=page+1, **request.args) }}">
+                        Next
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

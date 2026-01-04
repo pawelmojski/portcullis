@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Groups - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-folder"></i> Server Groups</h2>
+    <a href="{{ url_for('groups.add') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add Group
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Servers</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in groups %}
+                    <tr>
+                        <td>{{ group.id }}</td>
+                        <td>
+                            <strong><i class="bi bi-folder"></i> {{ group.name }}</strong>
+                        </td>
+                        <td>{{ group.description or '-' }}</td>
+                        <td>
+                            <span class="badge bg-info">{{ group.members|length }} servers</span>
+                        </td>
+                        <td>{{ group.created_at.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            <a href="{{ url_for('groups.view', group_id=group.id) }}" 
+                               class="btn btn-sm btn-info" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="{{ url_for('groups.edit', group_id=group.id) }}" 
+                               class="btn btn-sm btn-warning" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('groups.delete', group_id=group.id) }}" 
+                                  style="display: inline;" onsubmit="return confirmDelete('group {{ group.name }}');">
+                                <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No groups found. Create your first group!</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

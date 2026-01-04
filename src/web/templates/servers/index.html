@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Servers - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-server"></i> Servers</h2>
+    <a href="{{ url_for('servers.add') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add Server
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Address</th>
+                        <th>Proxy IP</th>
+                        <th>Protocols</th>
+                        <th>Groups</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for server in servers %}
+                    <tr>
+                        <td>{{ server.id }}</td>
+                        <td>
+                            <strong>{{ server.name }}</strong>
+                            {% if server.description %}
+                            <br><small class="text-muted">{{ server.description }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <code>{{ server.address }}:{{ server.port }}</code>
+                        </td>
+                        <td>
+                            {% if server.ip_allocation %}
+                                <span class="badge bg-success">{{ server.ip_allocation.proxy_ip }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Not allocated</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if server.ssh_enabled %}
+                                <span class="badge bg-info">SSH</span>
+                            {% endif %}
+                            {% if server.rdp_enabled %}
+                                <span class="badge bg-info">RDP</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">{{ server.group_members|length }} groups</span>
+                        </td>
+                        <td>
+                            {% if server.is_active %}
+                                <span class="badge badge-active">Active</span>
+                            {% else %}
+                                <span class="badge badge-inactive">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ server.created_at.strftime('%Y-%m-%d') }}</td>
+                        <td>
+                            <a href="{{ url_for('servers.view', server_id=server.id) }}" 
+                               class="btn btn-sm btn-info" title="View">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="{{ url_for('servers.edit', server_id=server.id) }}" 
+                               class="btn btn-sm btn-warning" title="Edit">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form method="POST" action="{{ url_for('servers.delete', server_id=server.id) }}" 
+                                  style="display: inline;" onsubmit="return confirmDelete('server {{ server.name }}');">
+                                <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No servers found. Add your first server!</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

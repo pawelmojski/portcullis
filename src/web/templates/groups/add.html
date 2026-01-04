@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Add Group - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-folder"></i> Add Server Group</h2>
+    <a href="{{ url_for('groups.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('groups.add') }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Group Name <span class="required">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               placeholder="production-web-servers" required autofocus>
+                        <small class="form-text text-muted">Unique name for this server group</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" 
+                                  rows="3" placeholder="Production web servers in AWS us-east-1"></textarea>
+                        <small class="form-text text-muted">Optional: Describe what this group contains</small>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        You can add servers to this group after creating it.
+                    </div>
+                    
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('groups.index') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Create Group
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

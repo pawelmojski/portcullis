@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Group: {{ group.name }} - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-pencil"></i> Edit Group: {{ group.name }}</h2>
+    <a href="{{ url_for('groups.view', group_id=group.id) }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('groups.edit', group_id=group.id) }}">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Group Name <span class="required">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ group.name }}" required autofocus>
+                        <small class="form-text text-muted">Unique name for this server group</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" 
+                                  rows="3">{{ group.description or '' }}</textarea>
+                        <small class="form-text text-muted">Optional: Describe what this group contains</small>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        To manage group members, please use the <a href="{{ url_for('groups.view', group_id=group.id) }}">group view page</a>
+                    </div>
+                    
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('groups.view', group_id=group.id) }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Update Group
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

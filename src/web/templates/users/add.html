@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Add User - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-person-plus"></i> Add User</h2>
+    <a href="{{ url_for('users.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('users.add') }}">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username <span class="required">*</span></label>
+                        <input type="text" class="form-control" id="username" name="username" 
+                               placeholder="john.doe" required autofocus>
+                        <small class="form-text text-muted">Username for jumphost access</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" 
+                               placeholder="john.doe@example.com">
+                        <small class="form-text text-muted">Optional: Email for notifications</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" 
+                                   name="is_active" checked>
+                            <label class="form-check-label" for="is_active">
+                                User is active
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">Inactive users cannot connect</small>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h5 class="mb-3"><i class="bi bi-geo-alt"></i> Source IPs</h5>
+                    <p class="text-muted">Add at least one source IP address for this user (you can add more later)</p>
+                    
+                    <div id="sourceIPs">
+                        <div class="source-ip-group mb-3">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label">IP Address <span class="required">*</span></label>
+                                    <input type="text" class="form-control" name="source_ips[]" 
+                                           placeholder="192.168.1.100" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Description</label>
+                                    <input type="text" class="form-control" name="ip_descriptions[]" 
+                                           placeholder="Home network, Office, etc.">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addSourceIPField()">
+                        <i class="bi bi-plus"></i> Add Another IP
+                    </button>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('users.index') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Create User
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function addSourceIPField() {
+    const container = document.getElementById('sourceIPs');
+    const newGroup = document.createElement('div');
+    newGroup.className = 'source-ip-group mb-3';
+    newGroup.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <label class="form-label">IP Address <span class="required">*</span></label>
+                <input type="text" class="form-control" name="source_ips[]" 
+                       placeholder="192.168.1.100" required>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label">Description</label>
+                <input type="text" class="form-control" name="ip_descriptions[]" 
+                       placeholder="Home network, Office, etc.">
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <button type="button" class="btn btn-danger" onclick="this.closest('.source-ip-group').remove()">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    container.appendChild(newGroup);
+}
+</script>
+{% endblock %}

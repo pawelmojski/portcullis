@@ -1,0 +1,157 @@
+/* Custom styles for Jumphost Admin */
+
+:root {
+    --primary-color: #0d6efd;
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --dark-color: #212529;
+}
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.footer {
+    margin-top: auto;
+}
+
+/* Service status badges */
+.service-status {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.service-status.running {
+    background-color: var(--success-color);
+    box-shadow: 0 0 5px var(--success-color);
+}
+
+.service-status.stopped {
+    background-color: var(--danger-color);
+}
+
+/* Stats cards */
+.stats-card {
+    transition: transform 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.stats-card .card-body {
+    padding: 1.5rem;
+}
+
+.stats-card .stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin: 0;
+}
+
+.stats-card .stat-label {
+    color: #6c757d;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stats-card .stat-icon {
+    font-size: 3rem;
+    opacity: 0.3;
+}
+
+/* Badge styles */
+.badge-active {
+    background-color: var(--success-color);
+}
+
+.badge-inactive {
+    background-color: var(--danger-color);
+}
+
+.badge-expired {
+    background-color: var(--warning-color);
+}
+
+/* Table styles */
+.table-hover tbody tr:hover {
+    background-color: rgba(0,0,0,0.02);
+}
+
+.table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.875rem;
+    letter-spacing: 0.5px;
+}
+
+/* Action buttons */
+.btn-action {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Audit log */
+.audit-log-entry {
+    border-left: 3px solid transparent;
+    padding-left: 1rem;
+}
+
+.audit-log-entry.success {
+    border-left-color: var(--success-color);
+}
+
+.audit-log-entry.danger {
+    border-left-color: var(--danger-color);
+}
+
+.audit-log-entry.warning {
+    border-left-color: var(--warning-color);
+}
+
+/* Forms */
+.form-label {
+    font-weight: 600;
+}
+
+.required::after {
+    content: " *";
+    color: var(--danger-color);
+}
+
+/* Loading spinner */
+.spinner-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .stats-card .stat-value {
+        font-size: 2rem;
+    }
+    
+    .stats-card .stat-icon {
+        font-size: 2rem;
+    }
+}

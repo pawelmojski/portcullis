@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Group: {{ group.name }} - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-folder"></i> Group: {{ group.name }}</h2>
+    <div>
+        <a href="{{ url_for('groups.edit', group_id=group.id) }}" class="btn btn-warning">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
+        <a href="{{ url_for('groups.index') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="bi bi-info-circle"></i> Group Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th width="15%">ID:</th>
+                        <td>{{ group.id }}</td>
+                    </tr>
+                    <tr>
+                        <th>Name:</th>
+                        <td><strong>{{ group.name }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th>Description:</th>
+                        <td>{{ group.description or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Total Servers:</th>
+                        <td><span class="badge bg-info">{{ group.members|length }} servers</span></td>
+                    </tr>
+                    <tr>
+                        <th>Created:</th>
+                        <td>{{ group.created_at|datetime }}</td>
+                    </tr>
+                    <tr>
+                        <th>Updated:</th>
+                        <td>{{ group.updated_at|datetime }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-server"></i> Group Members ({{ group.members|length }})</h5>
+                {% if available_servers %}
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+                    <i class="bi bi-plus"></i> Add Server
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if group.members %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Server Name</th>
+                                <th>Address</th>
+                                <th>Protocols</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for member in group.members %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('servers.view', server_id=member.server.id) }}">
+                                        <i class="bi bi-server"></i> {{ member.server.name }}
+                                    </a>
+                                    {% if member.server.description %}
+                                    <br><small class="text-muted">{{ member.server.description }}</small>
+                                    {% endif %}
+                                </td>
+                                <td><code>{{ member.server.address }}:{{ member.server.port }}</code></td>
+                                <td>
+                                    {% if member.server.ssh_enabled %}
+                                        <span class="badge bg-info">SSH</span>
+                                    {% endif %}
+                                    {% if member.server.rdp_enabled %}
+                                        <span class="badge bg-info">RDP</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if member.server.is_active %}
+                                        <span class="badge badge-active">Active</span>
+                                    {% else %}
+                                        <span class="badge badge-inactive">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('groups.delete_member', group_id=group.id, member_id=member.id) }}" 
+                                          style="display: inline;" onsubmit="return confirmDelete('server {{ member.server.name }} from this group');">
+                                        <button type="submit" class="btn btn-sm btn-danger" title="Remove from group">
+                                            <i class="bi bi-x-circle"></i> Remove
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-3">No servers in this group. Add servers using the button above.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Member Modal -->
+{% if available_servers %}
+<div class="modal fade" id="addMemberModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('groups.add_member', group_id=group.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Server to Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="server_id" class="form-label">Server <span class="required">*</span></label>
+                        <select class="form-select" id="server_id" name="server_id" required>
+                            <option value="">Select a server...</option>
+                            {% for server in available_servers %}
+                            <option value="{{ server.id }}">
+                                {{ server.name }} ({{ server.address }}:{{ server.port }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Server</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

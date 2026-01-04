@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}User: {{ user.username }} - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-person"></i> User: {{ user.username }}</h2>
+    <div>
+        <a href="{{ url_for('users.edit', user_id=user.id) }}" class="btn btn-warning">
+            <i class="bi bi-pencil"></i> Edit
+        </a>
+        <a href="{{ url_for('users.index') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="bi bi-info-circle"></i> User Information</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th width="30%">ID:</th>
+                        <td>{{ user.id }}</td>
+                    </tr>
+                    <tr>
+                        <th>Username:</th>
+                        <td><strong>{{ user.username }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th>Email:</th>
+                        <td>{{ user.email or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Status:</th>
+                        <td>
+                            {% if user.is_active %}
+                                <span class="badge badge-active">Active</span>
+                            {% else %}
+                                <span class="badge badge-inactive">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Created:</th>
+                        <td>{{ user.created_at|datetime }}</td>
+                    </tr>
+                    <tr>
+                        <th>Updated:</th>
+                        <td>{{ user.updated_at|datetime }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="bi bi-geo-alt"></i> Source IPs ({{ user.source_ips|length }})</h5>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addIPModal">
+                    <i class="bi bi-plus"></i> Add IP
+                </button>
+            </div>
+            <div class="card-body">
+                {% if user.source_ips %}
+                <div class="list-group">
+                    {% for ip in user.source_ips %}
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ ip.source_ip }}</strong>
+                            {% if ip.description %}
+                            <br><small class="text-muted">{{ ip.description }}</small>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <form method="POST" action="{{ url_for('users.toggle_ip', user_id=user.id, ip_id=ip.id) }}" style="display: inline;">
+                                <button type="submit" class="btn btn-sm {{ 'btn-success' if ip.is_active else 'btn-secondary' }}" 
+                                        title="{{ 'Deactivate' if ip.is_active else 'Activate' }}">
+                                    <i class="bi bi-{{ 'toggle-on' if ip.is_active else 'toggle-off' }}"></i>
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('users.delete_ip', user_id=user.id, ip_id=ip.id) }}" 
+                                  style="display: inline;" onsubmit="return confirmDelete('IP {{ ip.source_ip }}');">
+                                <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-3">No source IPs configured</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-shield-check"></i> Access Policies ({{ user.access_policies|length }})</h5>
+                <a href="{{ url_for('policies.add') }}?user_id={{ user.id }}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-plus-circle"></i> Add Grant
+                </a>
+            </div>
+            <div class="card-body">
+                {% if user.access_policies %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Server</th>
+                                <th>Protocol</th>
+                                <th>Source IP</th>
+                                <th>SSH Logins</th>
+                                <th>Start Time</th>
+                                <th>End Time</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for policy in user.access_policies %}
+                            <tr>
+                                <td>{{ policy.id }}</td>
+                                <td>
+                                    {% if policy.target_server_id %}
+                                        <i class="bi bi-server"></i> {{ policy.target_server.name }}
+                                    {% elif policy.target_group_id %}
+                                        <i class="bi bi-folder"></i> {{ policy.target_group.name }}
+                                    {% else %}
+                                        <i class="bi bi-globe"></i> All servers
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if policy.protocol %}
+                                        <span class="badge bg-info">{{ policy.protocol|upper }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">ALL</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if policy.source_ip_id and policy.source_ip_ref %}
+                                        {{ policy.source_ip_ref.source_ip }}
+                                    {% else %}
+                                        <span class="text-muted">Any</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if policy.protocol == 'rdp' %}
+                                        <span class="text-danger"><i class="bi bi-x-circle"></i></span>
+                                    {% elif policy.ssh_logins %}
+                                        {% for login in policy.ssh_logins %}
+                                            <span class="badge bg-secondary">{{ login.allowed_login }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-muted">All</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ policy.start_time|datetime }}</td>
+                                <td>{{ policy.end_time|datetime if policy.end_time else 'Never' }}</td>
+                                <td>
+                                    {% if policy.is_active %}
+                                        <span class="badge badge-active">Active</span>
+                                    {% else %}
+                                        <span class="badge badge-inactive">Inactive</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-3">No access policies assigned</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add IP Modal -->
+<div class="modal fade" id="addIPModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('users.add_ip', user_id=user.id) }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Source IP</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="source_ip" class="form-label">IP Address <span class="required">*</span></label>
+                        <input type="text" class="form-control" id="source_ip" name="source_ip" 
+                               placeholder="192.168.1.100" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <input type="text" class="form-control" id="description" name="description" 
+                               placeholder="Home network, Office, etc.">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add IP</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

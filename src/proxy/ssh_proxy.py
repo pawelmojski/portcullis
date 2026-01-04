@@ -17,9 +17,10 @@ import paramiko
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.core.database import SessionLocal, User, Server, AccessGrant
+from src.core.database import SessionLocal, User, Server, AccessGrant, Session as DBSession
 from src.core.access_control_v2 import AccessControlEngineV2 as AccessControl
 from src.core.ip_pool import IPPoolManager
+from src.core.utmp_helper import write_utmp_login, write_utmp_logout
 
 # Logging
 logging.basicConfig(
@@ -444,8 +445,53 @@ class SSHProxyServer:
                 # For interactive shell sessions
                 backend_channel.invoke_shell()
             
+            # Create session record in database
+            db_session = DBSession(
+                session_id=session_id,
+                user_id=user.id,
+                server_id=target_server.id,
+                protocol='ssh',
+                source_ip=source_ip,
+                proxy_ip=dest_ip,
+                backend_ip=target_server.ip_address,
+                backend_port=22,
+                ssh_username=server_handler.ssh_login,
+                subsystem_name=server_handler.subsystem_name.decode('utf-8') if server_handler.subsystem_name and isinstance(server_handler.subsystem_name, bytes) else server_handler.subsystem_name,
+                ssh_agent_used=bool(server_handler.agent_channel),
+                started_at=datetime.utcnow(),
+                is_active=True,
+                recording_path=recorder.recording_file if hasattr(recorder, 'recording_file') else None
+            )
+            db.add(db_session)
+            db.commit()
+            db.refresh(db_session)
+            logger.info(f"Session {session_id} tracked in database (ID: {db_session.id})")
+            
+            # Write to utmp/wtmp (makes session visible in 'w' command)
+            tty_name = f"ssh{db_session.id % 100}"  # ssh0-ssh99
+            backend_display = f"{server_handler.ssh_login}@{target_server.name}"
+            if server_handler.subsystem_name:
+                subsys = server_handler.subsystem_name.decode('utf-8') if isinstance(server_handler.subsystem_name, bytes) else server_handler.subsystem_name
+                backend_display += f":{subsys}"
+            write_utmp_login(session_id, user.username, tty_name, source_ip, backend_display)
+            logger.info(f"Session {session_id} registered in utmp as {tty_name}")
+            
             # Forward traffic
             self.forward_channel(channel, backend_channel, recorder)
+            
+            # Close session in database
+            db_session.ended_at = datetime.utcnow()
+            db_session.is_active = False
+            db_session.duration_seconds = int((db_session.ended_at - db_session.started_at).total_seconds())
+            db_session.termination_reason = 'normal'
+            if hasattr(recorder, 'recording_file') and os.path.exists(recorder.recording_file):
+                db_session.recording_size = os.path.getsize(recorder.recording_file)
+            db.commit()
+            logger.info(f"Session {session_id} ended normally (duration: {db_session.duration_seconds}s)")
+            
+            # Write logout to utmp/wtmp
+            write_utmp_logout(tty_name, user.username)
+            logger.info(f"Session {session_id} removed from utmp")
             
             # Save recording
             recorder.record_event('session_end', 'Connection closed')
@@ -453,6 +499,23 @@ class SSHProxyServer:
         
         except Exception as e:
             logger.error(f"Error handling client {source_ip}: {e}", exc_info=True)
+            # Try to close session in database on error
+            try:
+                db_session_error = db.query(DBSession).filter(DBSession.session_id == session_id).first()
+                if db_session_error and db_session_error.is_active:
+                    db_session_error.ended_at = datetime.utcnow()
+                    db_session_error.is_active = False
+                    db_session_error.duration_seconds = int((db_session_error.ended_at - db_session_error.started_at).total_seconds())
+                    db_session_error.termination_reason = 'error'
+                    db.commit()
+                    logger.info(f"Session {session_id} closed due to error")
+                    
+                    # Write logout to utmp
+                    tty_name = f"ssh{db_session_error.id % 100}"
+                    write_utmp_logout(tty_name, user.username if 'user' in locals() else "")
+                    
+            except Exception as cleanup_error:
+                logger.error(f"Error closing session record: {cleanup_error}")
         
         finally:
             if backend_transport:

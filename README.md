@@ -1,9 +1,9 @@
-# 🚀 Jumphost Project - SSH/RDP Proxy with Flexible Access Control V2
+# 🚀 Jumphost Project - SSH/RDP Proxy with Web Management Interface
 
-**Production-ready SSH and RDP jumphost with policy-based access control, session recording, and dynamic IP routing.**
+**Production-ready SSH and RDP jumphost with policy-based access control, session recording, dynamic IP routing, and Flask Web GUI.**
 
 [![Status](https://img.shields.io/badge/status-production-brightgreen)]()
-[![Version](https://img.shields.io/badge/version-1.0-blue)]()
+[![Version](https://img.shields.io/badge/version-1.1-blue)]()
 [![Python](https://img.shields.io/badge/python-3.13-blue)]()
 [![License](https://img.shields.io/badge/license-Proprietary-red)]()
 
@@ -12,19 +12,22 @@
 ## 📋 Overview
 
 Jumphost is a comprehensive SSH and RDP proxy solution designed for enterprise environments requiring:
+- **Web Management Interface** - Modern Flask-based GUI with Bootstrap 5
 - **Granular access control** based on source IP, user, server groups, and protocols
 - **Session recording** for compliance and audit purposes
 - **Temporal permissions** with automatic expiration
 - **Transparent authentication** with SSH agent forwarding support
 - **Dynamic backend routing** using IP allocation pool
+- **Real-time monitoring** with charts and audit logs
 
 ### Architecture
 
 ```
 Client (100.64.0.X)
     ↓
-Jumphost (10.0.160.129/130)
-    ├─ SSH Proxy (Port 22) ──→ Backend SSH Server (10.30.0.X:22)
+Jumphost (10.0.160.5)
+    ├─ Web GUI (Port 5000) ───→ Management Interface
+    ├─ SSH Proxy (Port 22) ───→ Backend SSH Server (10.30.0.X:22)
     └─ RDP Proxy (Port 3389) ─→ Backend RDP Server (10.30.0.X:3389)
     
 Access Control V2:
@@ -33,11 +36,30 @@ Access Control V2:
     • Group/Server/Service-level permissions
     • Protocol filtering (SSH, RDP, both)
     • SSH login restrictions
+    
+Web Management:
+    • User management (CRUD + source IPs)
+    • Server management (CRUD + IP allocation)
+    • Group management (N:M relationships)
+    • Policy wizard (grant/revoke access)
+    • Dashboard (service status, statistics, charts)
+    • Monitoring (audit logs, connection charts)
 ```
 
 ---
 
 ## ✨ Features
+
+### Web Management Interface 🆕
+- ✅ **Flask Web GUI** - Modern Bootstrap 5 interface
+- ✅ **Dashboard** - Service status, statistics, recent activity
+- ✅ **User Management** - CRUD operations + multiple source IPs
+- ✅ **Server Management** - CRUD + automatic IP allocation
+- ✅ **Group Management** - Create groups, assign servers (N:M)
+- ✅ **Policy Wizard** - Grant access with scope (group/server/service)
+- ✅ **Monitoring** - Audit logs with filters, connection charts
+- ✅ **Authentication** - Placeholder (admin/admin) ready for Azure AD
+- ✅ **Responsive Design** - Mobile-friendly layout
 
 ### Access Control V2
 - ✅ **Multiple Source IPs** - Users can connect from home, office, VPN, etc.
@@ -65,7 +87,68 @@ Access Control V2:
 - ✅ **PostgreSQL Database** - Robust storage with JSONB support
 - ✅ **Alembic Migrations** - Version-controlled schema changes
 - ✅ **CLI Management** - Complete command-line interface
+- ✅ **Web GUI** - Flask-based management interface
 - ✅ **Audit Logging** - All access attempts logged to database
+
+---
+
+## 🎨 Web Interface
+
+Access the web management interface at `http://10.0.160.5:5000`
+
+**Default credentials**: `admin` / `admin`
+
+### Features:
+
+#### 📊 Dashboard
+- Service status indicators (SSH Proxy, RDP Proxy, PostgreSQL)
+- Statistics cards (users, servers, policies, connections)
+- Today's activity summary with success rate
+- Active sessions list
+- Recent audit log entries
+
+#### 👥 User Management
+- List all users with source IPs and policy counts
+- Add new users with multiple source IPs
+- Edit user details
+- View user details (info, source IPs, policies)
+- Add/remove/toggle source IPs per user
+- Delete users
+
+#### 🖥️ Server Management
+- List all servers with proxy IPs and protocols
+- Add new servers with automatic IP allocation
+- Edit server details
+- View server details (info, IP allocation, group memberships)
+- Enable/disable SSH and RDP protocols
+- Delete servers
+
+#### 📁 Group Management
+- List all server groups
+- Create new groups
+- Edit group details
+- View group members
+- Add/remove servers from groups
+- Delete groups
+
+#### 🔑 Policy Management
+- List all access policies with filters
+- Grant access wizard with scope types:
+  - **Group**: All servers in a group
+  - **Server**: Single server (all protocols)
+  - **Service**: Single server + specific protocol
+- Protocol filtering (SSH, RDP, or both)
+- SSH login restrictions (specific system accounts)
+- Temporal access (duration in hours)
+- Revoke or delete policies
+
+#### 📈 Monitoring
+- Audit log viewer with pagination (50 per page)
+- Filters: action type, user, date range
+- Connection charts:
+  - Hourly connections (last 24 hours)
+  - Top users by connections (last 7 days)
+- Chart.js integration for live updates
 
 ---
 

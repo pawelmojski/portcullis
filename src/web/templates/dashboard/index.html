@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ super() }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">
+            <i class="bi bi-speedometer2"></i> Dashboard
+        </h1>
+    </div>
+</div>
+
+<!-- Service Status -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-gear"></i> Service Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for service in services %}
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="service-status {{ service.status }}"></span>
+                            <strong>{{ service.name }}</strong>
+                            <span class="ms-2 badge bg-secondary">Port {{ service.port }}</span>
+                        </div>
+                        {% if service.uptime %}
+                        <small class="text-muted">Uptime: {{ service.uptime }}</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4" id="dashboardStats">
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="stat-value">{{ stats.total_users }}</p>
+                        <p class="stat-label mb-0">Total Users</p>
+                    </div>
+                    <i class="bi bi-people stat-icon"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="stat-value">{{ stats.total_servers }}</p>
+                        <p class="stat-label mb-0">Total Servers</p>
+                    </div>
+                    <i class="bi bi-hdd-network stat-icon"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card bg-info text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="stat-value">{{ stats.active_policies }}</p>
+                        <p class="stat-label mb-0">Active Policies</p>
+                    </div>
+                    <i class="bi bi-key stat-icon"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3 mb-3">
+        <div class="card stats-card bg-warning text-dark">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <p class="stat-value" id="todayConnections">{{ stats.today_connections }}</p>
+                        <p class="stat-label mb-0">Today's Connections</p>
+                    </div>
+                    <i class="bi bi-arrow-right-circle stat-icon"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Today's Activity -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-activity"></i> Today's Activity</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h3 class="text-success" id="todayConnections">{{ stats.today_connections }}</h3>
+                        <p class="text-muted mb-0">Granted</p>
+                    </div>
+                    <div class="col-6">
+                        <h3 class="text-danger" id="todayDenied">{{ stats.today_denied }}</h3>
+                        <p class="text-muted mb-0">Denied</p>
+                    </div>
+                </div>
+                <hr>
+                <div class="text-center">
+                    <p class="mb-0">Success Rate: <strong id="successRate">{{ stats.success_rate }}%</strong></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-clock-history"></i> Active Sessions</h5>
+            </div>
+            <div class="card-body">
+                {% if active_sessions %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Protocol</th>
+                                <th>User</th>
+                                <th>Server</th>
+                                <th>Backend IP</th>
+                                <th>Source IP</th>
+                                <th>SSH Agent</th>
+                                <th>Started</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for session in active_sessions[:5] %}
+                            <tr>
+                                <td><span class="badge bg-{{ 'primary' if session.protocol == 'SSH' else 'success' }}">{{ session.protocol }}</span></td>
+                                <td>{{ session.user }}</td>
+                                <td><strong>{{ session.server }}</strong></td>
+                                <td><code>{{ session.backend_ip }}</code></td>
+                                <td><code>{{ session.source_ip }}</code></td>
+                                <td class="text-center">
+                                    {% if session.ssh_agent is not none %}
+                                        {% if session.ssh_agent %}
+                                            <span class="text-success">✓</span>
+                                        {% else %}
+                                            <span class="text-danger">✗</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ session.started|timeago }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No active sessions</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Servers with IP Pool Allocations -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-hdd-network"></i> Servers & IP Pool Allocations</h5>
+                <a href="{{ url_for('servers.index') }}" class="btn btn-sm btn-outline-primary">Manage Servers</a>
+            </div>
+            <div class="card-body">
+                {% if server_allocations %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Server Name</th>
+                                <th>Backend IP</th>
+                                <th>SSH Port</th>
+                                <th>RDP Port</th>
+                                <th>IP Pool Allocation</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in server_allocations %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url_for('servers.view', server_id=item.server.id) }}">
+                                        <strong>{{ item.server.name }}</strong>
+                                    </a>
+                                </td>
+                                <td><code>{{ item.server.ip_address }}</code></td>
+                                <td><span class="badge bg-secondary">{{ item.server.ssh_port or 22 }}</span></td>
+                                <td><span class="badge bg-secondary">{{ item.server.rdp_port or 3389 }}</span></td>
+                                <td>
+                                    {% if item.allocation %}
+                                        <span class="badge bg-success" style="cursor: pointer;" 
+                                              onclick="copyToClipboard('{{ item.allocation.allocated_ip }}', this)"
+                                              title="Click to copy">
+                                            <i class="bi bi-check-circle"></i> {{ item.allocation.allocated_ip }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">Not allocated</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.server.is_active %}
+                                        <span class="badge badge-active">Active</span>
+                                    {% else %}
+                                        <span class="badge badge-inactive">Inactive</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No servers configured</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Audit Log -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clipboard-data"></i> Recent Activity</h5>
+                <a href="{{ url_for('monitoring.audit') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body">
+                {% if recent_logs %}
+                <div class="list-group list-group-flush">
+                    {% for log in recent_logs %}
+                    <div class="list-group-item audit-log-entry {{ 'success' if 'granted' in log.action else 'danger' if 'denied' in log.action else 'warning' }}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>{{ log.action.replace('_', ' ').title() }}</strong>
+                                <p class="mb-1">
+                                    {% if log.user %}User: {{ log.user.username }} | {% endif %}
+                                    Source: <code>{{ log.source_ip }}</code>
+                                    {% if log.details %} - {{ log.details }}{% endif %}
+                                </p>
+                            </div>
+                            <small class="text-muted">{{ log.timestamp|timeago }}</small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No recent activity</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyToClipboard(text, element) {
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+            showCopiedFeedback(element);
+        }).catch(function(err) {
+            // Fallback to older method
+            fallbackCopy(text, element);
+        });
+    } else {
+        // Fallback for older browsers
+        fallbackCopy(text, element);
+    }
+}
+
+function fallbackCopy(text, element) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.select();
+    
+    try {
+        document.execCommand('copy');
+        showCopiedFeedback(element);
+    } catch (err) {
+        console.error('Failed to copy:', err);
+        alert('Failed to copy: ' + text);
+    }
+    
+    document.body.removeChild(textArea);
+}
+
+function showCopiedFeedback(element) {
+    const originalHTML = element.innerHTML;
+    element.innerHTML = '<i class="bi bi-clipboard-check"></i> Copied!';
+    element.classList.remove('bg-success');
+    element.classList.add('bg-info');
+    
+    setTimeout(function() {
+        element.innerHTML = originalHTML;
+        element.classList.remove('bg-info');
+        element.classList.add('bg-success');
+    }, 1500);
+}
+</script>
+{% endblock %}

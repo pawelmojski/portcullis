@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Server: {{ server.name }} - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-pencil"></i> Edit Server: {{ server.name }}</h2>
+    <a href="{{ url_for('servers.view', server_id=server.id) }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('servers.edit', server_id=server.id) }}">
+                    <h5 class="mb-3">Server Information</h5>
+                    
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Server Name <span class="required">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ server.name }}" required autofocus>
+                        <small class="form-text text-muted">Friendly name for this server</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Address <span class="required">*</span></label>
+                        <input type="text" class="form-control" id="address" name="address" 
+                               value="{{ server.address }}" required>
+                        <small class="form-text text-muted">IP address or hostname</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="port" class="form-label">Port <span class="required">*</span></label>
+                            <input type="number" class="form-control" id="port" name="port" 
+                                   value="{{ server.port }}" min="1" max="65535" required>
+                            <small class="form-text text-muted">Primary port (SSH: 22, RDP: 3389)</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" 
+                                  rows="2">{{ server.description or '' }}</textarea>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h5 class="mb-3">Protocols</h5>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="ssh_enabled" 
+                                   name="ssh_enabled" {{ 'checked' if server.ssh_enabled }}>
+                            <label class="form-check-label" for="ssh_enabled">
+                                <i class="bi bi-terminal"></i> Enable SSH
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="rdp_enabled" 
+                                   name="rdp_enabled" {{ 'checked' if server.rdp_enabled }}>
+                            <label class="form-check-label" for="rdp_enabled">
+                                <i class="bi bi-window-desktop"></i> Enable RDP
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" 
+                                   name="is_active" {{ 'checked' if server.is_active }}>
+                            <label class="form-check-label" for="is_active">
+                                Server is active
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">Inactive servers cannot be accessed</small>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('servers.view', server_id=server.id) }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Update Server
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

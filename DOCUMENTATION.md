@@ -2,14 +2,29 @@
 
 ## Project Overview
 
-Self-made SSH/RDP jump host with temporal access control, source IP mapping, session recording, and IP pool management.
+Self-made SSH/RDP jump host with temporal access control, source IP mapping, session recording, real-time monitoring, and system logging integration.
 
-## Architecture (Current State)
+## Architecture (Current State - v1.1)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         JUMP HOST                                │
 │                      (10.0.160.5)                                │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Web Management Interface (5000)                ⭐ NEW   │   │
+│  │                                                            │   │
+│  │  Flask Web GUI (Bootstrap 5)                              │   │
+│  │  - Dashboard: Service status, statistics, charts          │   │
+│  │  - Active Sessions: Real-time monitoring widget 🎯 NEW   │   │
+│  │  - User Management: CRUD + multiple source IPs            │   │
+│  │  - Server Management: CRUD + IP allocation                │   │
+│  │  - Group Management: Create groups, assign servers        │   │
+│  │  - Policy Wizard: Grant access with flexible scopes       │   │
+│  │  - Monitoring: Audit logs with filters, charts            │   │
+│  │  - Authentication: Placeholder (ready for Azure AD)       │   │
+│  │  - URL: http://10.0.160.5:5000 (admin/admin)             │   │
+│  └──────────────────────────────────────────────────────────┘   │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  SSH Access (10.0.160.129:22)                            │   │
@@ -18,7 +33,10 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 │  │  - Source IP: 100.64.0.20 → User: p.mojski               │   │
 │  │  - Agent forwarding support (-A flag)                     │   │
 │  │  - Session recording (JSON)                               │   │
+│  │  - Real-time session tracking 🎯 NEW                     │   │
+│  │  - UTMP/WTMP logging (ssh0-ssh99) 🎯 NEW                │   │
 │  │  - Backend: 10.0.160.4 (Linux SSH)                        │   │
+│  │  - Access Control V2: Policy-based authorization          │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────┐   │
@@ -31,34 +49,62 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 │  │                                                            │   │
 │  │  PyRDP MITM (localhost:13389)                             │   │
 │  │  - Full session recording (.pyrdp files)                  │   │
+│  │  - Real-time session tracking 🎯 NEW                     │   │
+│  │  - UTMP/WTMP logging (rdp0-rdp99) 🎯 NEW                │   │
+│  │  - Connection multiplexing detection 🎯 NEW              │   │
 │  │  - Backend: 10.30.0.140 (Windows RDP)                     │   │
+│  │  - Access Control V2: Policy-based authorization          │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  Core Components                                          │   │
 │  │                                                            │   │
-│  │  • PostgreSQL Database                                    │   │
-│  │    - users (username, source_ip, is_active)              │   │
-│  │    - servers (name, ip_address, os_type)                 │   │
-│  │    - access_grants (user_id, server_id, start/end time)  │   │
-│  │    - ip_allocations (ip, server_id, allocated_at)        │   │
-│  │    - session_recordings (user_id, server_id, file_path)  │   │
-│  │    - audit_logs (action, source_ip, success, details)    │   │
+│  │  • PostgreSQL Database (Access Control V2 Schema)         │   │
+│  │    - users (username, email, is_active)                  │   │
+│  │    - user_source_ips (multiple IPs per user) ⭐         │   │
+│  │    - servers (name, address, protocols, is_active)       │   │
+│  │    - server_groups (tags/groups) ⭐                      │   │
+│  │    - server_group_members (N:M relationships) ⭐         │   │
+│  │    - access_policies (flexible permissions) ⭐           │   │
+│  │    - policy_ssh_logins (SSH restrictions) ⭐             │   │
+│  │    - ip_allocations (proxy IP assignments)               │   │
+│  │    - session_recordings (file paths)                     │   │
+│  │    - audit_logs (all actions logged)                     │   │
+│  │    - sessions (real-time tracking) 🎯 NEW               │   │
 │  │                                                            │   │
-│  │  • Access Control Engine                                  │   │
-│  │    - Source IP + temporal validation                      │   │
-│  │    - Backend server verification                          │   │
-│  │    - For SSH: checks username + source_ip                │   │
-│  │    - For RDP: checks source_ip only (RDP auth later)     │   │
+│  │  • Access Control Engine V2 ⭐                           │   │
+│  │    - Policy-based authorization (group/server/service)   │   │
+│  │    - Multiple source IPs per user                         │   │
+│  │    - Protocol filtering (ssh/rdp/both)                    │   │
+│  │    - SSH login restrictions                               │   │
+│  │    - Temporal validation (start/end time)                 │   │
+│  │    - Legacy fallback for V1 compatibility                 │   │
+│  │                                                            │   │
+│  │  • Session Monitoring System 🎯 NEW                     │   │
+│  │    - Database tracking (18-field sessions table)         │   │
+│  │    - UTMP/WTMP integration (system logging)              │   │
+│  │    - Custom `jw` command (view active sessions)          │   │
+│  │    - Duration/recording size auto-calculation            │   │
+│  │    - SSH subsystem & agent detection                      │   │
+│  │    - RDP multiplexing support (10s window)               │   │
 │  │                                                            │   │
 │  │  • IP Pool Manager                                        │   │
 │  │    - Pool: 10.0.160.128/25 (126 usable IPs)             │   │
 │  │    - Dynamic allocation for backend servers               │   │
 │  │    - Release on grant expiration                          │   │
 │  │                                                            │   │
-│  │  • CLI Management Tool (Typer + Rich)                    │   │
-│  │    - add-user, add-server, grant-access                  │   │
-│  │    - list-users, list-servers, list-grants               │   │
+│  │  • CLI Management Tool (Typer + Rich) ⭐                 │   │
+│  │    - V2 Commands: add-user-v2, add-server-group,         │   │
+│  │      grant-access-v2, list-users-v2, etc.                │   │
+│  │    - Legacy V1 commands still supported                   │   │
+│  │    - `jw` command: View active proxy sessions 🎯 NEW    │   │
+│  │                                                            │   │
+│  │  • Web Management Interface (Flask) ⭐ NEW               │   │
+│  │    - Complete CRUD for users, servers, groups, policies  │   │
+│  │    - Dashboard with monitoring and charts                 │   │
+│  │    - Active Sessions widget (real-time) 🎯 NEW          │   │
+│  │    - Audit log viewer with pagination and filters         │   │
+│  │    - Policy wizard with flexible grant scopes             │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -80,7 +126,24 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 ### System
 - **OS**: Debian 13 (35GB disk, expanded from 3GB)
 - **Python**: 3.13 with virtualenv at `/opt/jumphost/venv`
-- **Database**: PostgreSQL with SQLAlchemy ORM
+- **Database**: PostgreSQL 17 with SQLAlchemy ORM
+- **Alembic**: Database migrations (V2 schema: 8419b886bc6d)
+
+### Web Interface (NEW in v1.1)
+- **Flask 3.1.2**: Web framework with Blueprint architecture
+- **Flask-Login 0.6.3**: User session management
+- **Flask-WTF 1.2.2**: Form handling with CSRF protection
+- **Flask-Cors 6.0.2**: API endpoint support
+- **Bootstrap 5.3.0**: Frontend CSS framework (CDN)
+- **Bootstrap Icons 1.11.0**: Icon library (CDN)
+- **Chart.js 4.4.0**: Statistics charts (CDN)
+- **Features**:
+  - Dashboard with service monitoring
+  - User/Server/Group/Policy CRUD operations
+  - Policy wizard with flexible scopes
+  - Audit log viewer with pagination
+  - Connection charts (hourly, by user)
+  - Responsive mobile-friendly design
 
 ### SSH Proxy
 - **Paramiko 4.0.0**: SSH server/client implementation
@@ -124,11 +187,13 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
    - If OK: Forward to PyRDP MITM on localhost:13389
    - If DENIED: Send "ACCESS DENIED" message, close, log to audit_logs
 
-2. **Stage 2 - PyRDP MITM**:
+2. **Stage 2 - PyRDP MITM** (with Session Tracking ⭐):
    - Receives connection from guard proxy
    - Performs full RDP MITM
    - Records session to `.pyrdp` files
    - Connects to backend Windows server
+   - Creates/closes Session records in database
+   - Tracks session duration and recording file size
 
 ## File Structure
 
@@ -193,6 +258,48 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 - `resource_type`, `resource_id`, `source_ip`
 - `success` (Boolean), `details` (TEXT), `timestamp`
 
+### sessions (NEW in v1.1) ⭐
+Real-time session tracking for active and historical connections:
+- `id` (PK), `session_id` (unique) - Session identifier
+- `user_id` (FK), `server_id` (FK), `protocol` ('ssh' or 'rdp')
+- `source_ip`, `proxy_ip`, `backend_ip`, `backend_port`
+- `ssh_username` - SSH login used for connection
+- `subsystem_name` - Subsystem type (sftp, scp, etc.)
+- `ssh_agent_used` - Boolean flag if SSH agent forwarding was used
+- `started_at`, `ended_at`, `duration_seconds`
+- `is_active` - TRUE for active sessions, FALSE for closed
+- `termination_reason` - 'normal', 'error', 'timeout', 'killed'
+- `recording_path`, `recording_size` - Session recording details
+- `policy_id` (FK) - Policy that granted access
+- `created_at`
+
+**Features:**
+- Real-time tracking of SSH and RDP connections ⭐
+- Automatic session start on successful backend authentication
+- Automatic session close on disconnect (normal or error)
+- Duration calculation in seconds
+- Recording file path and size tracking
+- SSH agent detection and subsystem tracking (sftp, scp)
+- RDP session recording with PyRDP integration
+- Visible in Web GUI Dashboard "Active Sessions"
+
+**SSH Proxy Integration:**
+- Creates session record after backend authentication
+- Updates session on disconnect (via channel close handler)
+- Tracks SSH username, subsystem (sftp/scp), SSH agent usage
+- Records session duration and file size on close
+
+**RDP Proxy Integration (PyRDP MITM):**
+- Creates session record after access control check
+- Uses TCP layer observer pattern for disconnect detection
+- Deduplikacja: RDP clients open multiple connections (10s window)
+- Client and Server disconnection observers for reliable cleanup
+- Records session duration and .pyrdp file size on close
+- Multiple concurrent sessions supported independently
+- Updates on normal close: `ended_at`, `duration_seconds`, `recording_size`
+- Updates on error: `termination_reason='error'`
+- Logs all session events to `/var/log/jumphost/ssh_proxy.log`
+
 ## Current Network Configuration
 
 ### Management
@@ -251,17 +358,19 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 ### SSH Proxy ✓
 - [x] Password authentication
 - [x] Public key authentication
-- [x] SSH agent forwarding (-A flag)
+- [x] SSH agent forwarding (-A flag, tracked in session metadata) ⭐
 - [x] PTY forwarding (term type, dimensions)
 - [x] Shell sessions
-- [x] Exec requests (SCP)
-- [x] Subsystem requests (SFTP)
+- [x] Exec requests (SCP, tracked in session metadata) ⭐
+- [x] Subsystem requests (SFTP, tracked in session metadata) ⭐
 - [x] Session recording (JSON)
 - [x] Source IP-based access control
 - [x] Temporal access validation
+- [x] Real-time session monitoring 🎯
+- [x] UTMP/WTMP logging (ssh0-ssh99) 🎯
 
 ### RDP Proxy ✓
-- [x] PyRDP MITM with session recording
+- [x] PyRDP MITM with session recording and real-time tracking ⭐
 - [x] Guard proxy with access control
 - [x] Source IP-based access control
 - [x] Backend server verification
@@ -269,37 +378,49 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 - [x] Session recording (.pyrdp files)
 - [x] RDP version compatibility patch (RDP10_12)
 - [x] Access denial with message
+- [x] Real-time session monitoring in Web GUI ⭐
+- [x] Connection multiplexing detection (10s window) 🎯
+- [x] UTMP/WTMP logging (rdp0-rdp99) 🎯
+
+### Session Monitoring & Logging 🎯 (NEW in v1.1)
+- [x] Real-time session tracking in database (sessions table with 18 fields)
+- [x] Web GUI "Active Sessions" dashboard widget (7-column table)
+- [x] UTMP/WTMP integration (system login records)
+- [x] Custom `jw` command for viewing active proxy sessions
+- [x] Session duration auto-calculation
+- [x] Recording file path and size tracking
+- [x] SSH subsystem detection (sftp, scp, shell)
+- [x] SSH agent forwarding detection
+- [x] RDP connection multiplexing support
+- [x] Multiple concurrent sessions (tested with 4+ simultaneous connections)
+- [x] Reliable session closing via TCP observer pattern
 
 ## Known Issues & Limitations
 
 ### Architecture Issues
-1. **CRITICAL**: SSH and RDP share same IP (10.0.160.129)
-   - Clients can't determine which backend by destination IP
-   - Breaks IP pool allocation logic
-   - **Solution**: Move to 0.0.0.0 listen, extract destination IP
-
-2. **IP Pool Not Used**: Dynamic allocation not yet implemented
+1. **IP Pool Not Used**: Dynamic allocation not yet implemented
    - Currently manual IP assignment
    - Need automated allocation on grant creation
    - Need automatic cleanup on grant expiration
 
-3. **No FreeIPA Integration**: Using local database for users
+2. **No FreeIPA Integration**: Using local database for users
    - Planned: Sync users from FreeIPA
    - Planned: FreeIPA authentication backend
 
 ### Minor Issues
 1. Source IP must be manually set in database (CLI doesn't support it)
-2. No web GUI for management
-3. No monitoring/alerting
-4. No systemd service files
-5. SSH proxy runs on port 22, conflicts with management SSH
+2. No monitoring/alerting
+3. No systemd service files
+4. SSH proxy runs on port 22, conflicts with management SSH
+5. UTMP entries not shown in 'w' command (no real PTY) - use `jw` instead
 
 ## Performance & Scaling
 
 ### Current Limits
 - SSH: Paramiko handles ~100 concurrent connections
 - RDP: PyRDP MITM tested with ~20 concurrent sessions
-- Database: PostgreSQL, no tuning yet
+- Database: PostgreSQL with indexes on is_active, started_at
+- Session tracking: Tested with 4+ simultaneous connections
 
 ### Future Optimizations
 - Connection pooling for database
@@ -334,6 +455,12 @@ sudo /opt/jumphost/src/proxy/rdp_wrapper.sh &
 
 # RDP Guard (Access Control)
 cd /opt/jumphost && sudo /opt/jumphost/venv/bin/python src/proxy/rdp_guard.py &
+
+# Web GUI (Development)
+cd /opt/jumphost/src/web && /opt/jumphost/venv/bin/python app.py &
+
+# Web GUI (Production with gunicorn)
+cd /opt/jumphost/src/web && /opt/jumphost/venv/bin/gunicorn --bind 0.0.0.0:5000 --workers 4 app:app &
 ```
 
 ### Stop Services
@@ -341,6 +468,8 @@ cd /opt/jumphost && sudo /opt/jumphost/venv/bin/python src/proxy/rdp_guard.py &
 sudo pkill -f ssh_proxy
 sudo pkill -f rdp_wrapper
 sudo pkill -f rdp_guard
+pkill -f "python.*app.py"
+pkill -f gunicorn
 ```
 
 ### View Logs
@@ -348,18 +477,87 @@ sudo pkill -f rdp_guard
 tail -f /var/log/jumphost/ssh_proxy.log
 tail -f /var/log/jumphost/rdp_guard.log
 tail -f /var/log/jumphost/rdp_wrapper.log
+tail -f /tmp/flask.log  # Web GUI logs
 ```
 
 ### Check Audit Logs
 ```bash
+# Via CLI
 cd /opt/jumphost && /opt/jumphost/venv/bin/python -c "
 from src.core.database import SessionLocal, AuditLog
-db = SessionLocal()
+db =Web GUI Tests
+- [x] Login with admin/admin
+- [x] Dashboard loads with service status
+- [x] Dashboard shows statistics cards
+- [x] Dashboard auto-refreshes every 30 seconds
+- [x] User list page loads
+- [x] Add new user with multiple source IPs
+- [x] View user details with policies
+- [x] Edit user information
+- [x] Delete user
+- [x] Server list page loads
+- [x] Add new server with IP allocation
+- [x] View server details with groups
+- [x] Edit server information
+- [x] Delete server
+- [x] Group list page loads
+- [x] Create new group
+- [x] View group with members
+- [x] Add server to group
+- [x] Remove server from group
+- [x] Delete group
+- [x] Policy list page loads with filters
+- [x] Grant access wizard (group scope)
+- [x] Grant access wizard (server scope)
+- [x] Grant access wizard (service scope)
+- [x] Revoke policy
+- [x] Delete policy
+- [x] Monitoring page loads with charts
+- [x] Audit log viewer with pagination
+- [x] Audit log filters work
+- [x] Logout works
+- [x] Session persistence across requests
+
+###  SessionLocal()
 logs = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(10).all()
 for log in logs:
     print(f'{log.timestamp} - {log.action} - {log.source_ip} - {log.success} - {log.details}')
 db.close()
 "
+
+# Via Web GUI
+# Navigate to: http://10.0.160.5:5000/monitoring/audit
+# Login: admin / admin
+# Use filters to search logs
+```
+
+### Access Web GUI
+```bash
+# Development (direct Python)
+cd /opt/jumphost/src/web
+/opt/jumphost/venv/bin/python app.py
+# Access: http://10.0.160.5:5000
+# Login: admin / admin
+
+# Production (with gunicorn)
+cd /opt/jumphost/src/web
+/opt/jumphost/venv/bin/gunicorn --bind 0.0.0.0:5000 --workers 4 app:app
+# Access: http://10.0.160.5:5000
+```
+
+### Web GUI Operations
+```bash
+# View dashboard
+curl -u admin:admin http://localhost:5000/
+
+# Get stats API
+curl http://localhost:5000/dashboard/api/stats
+
+# Get hourly connection chart data
+curl http://localhost:5000/monitoring/api/stats/hourly
+
+# Get top users chart data
+curl http://localhost:5000/monitoring/api/stats/by_user
 ```
 
 ## Testing Checklist

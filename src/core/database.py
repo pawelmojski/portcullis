@@ -1,10 +1,11 @@
 """Database configuration and models."""
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, CheckConstraint, or_
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, CheckConstraint, or_, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from flask_login import UserMixin
 
 load_dotenv()
 
@@ -14,7 +15,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
-class User(Base):
+class User(UserMixin, Base):
     """User model - synchronized with FreeIPA."""
     __tablename__ = "users"
     
@@ -209,7 +210,7 @@ class AccessPolicy(Base):
     
     # Temporal access
     start_time = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    end_time = Column(DateTime, nullable=False, index=True)
+    end_time = Column(DateTime, nullable=True, index=True)  # NULL = permanent access
     
     is_active = Column(Boolean, default=True, index=True)
     granted_by = Column(String(255))
@@ -253,6 +254,57 @@ class PolicySSHLogin(Base):
     
     __table_args__ = (
         CheckConstraint("policy_id IS NOT NULL", name="check_ssh_login_policy_id"),
+    )
+
+
+class Session(Base):
+    """Active and historical connection sessions (SSH/RDP)."""
+    __tablename__ = "sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(String(255), unique=True, nullable=False, index=True)  # Unique session identifier
+    
+    # Session details
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    server_id = Column(Integer, ForeignKey("servers.id"), index=True)
+    protocol = Column(String(10), nullable=False, index=True)  # ssh, rdp
+    
+    # Connection info
+    source_ip = Column(String(45), nullable=False)
+    proxy_ip = Column(String(45))  # IP from pool used for this session
+    backend_ip = Column(String(45), nullable=False)
+    backend_port = Column(Integer, nullable=False)
+    ssh_username = Column(String(255))  # SSH login used
+    subsystem_name = Column(String(50))  # sftp, scp, etc.
+    ssh_agent_used = Column(Boolean, default=False)  # True if SSH agent was used
+    
+    # Timing
+    started_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    ended_at = Column(DateTime, index=True)  # NULL = active session
+    duration_seconds = Column(Integer)  # Calculated on end
+    
+    # Recording
+    recording_path = Column(String(512))  # Path to session recording file
+    recording_size = Column(BigInteger)  # Size in bytes
+    
+    # Status
+    is_active = Column(Boolean, default=True, index=True)
+    termination_reason = Column(String(255))  # normal, timeout, error, killed
+    
+    # Audit trail
+    policy_id = Column(Integer, ForeignKey("access_policies.id"))  # Which policy granted access
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User")
+    server = relationship("Server")
+    policy = relationship("AccessPolicy")
+    
+    __table_args__ = (
+        CheckConstraint(
+            "protocol IN ('ssh', 'rdp')",
+            name="check_session_protocol_valid"
+        ),
     )
 
 

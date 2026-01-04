@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Access Policies - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-shield-check"></i> Access Policies</h2>
+    <a href="{{ url_for('policies.add') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Grant Access
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('policies.index') }}" class="row g-3">
+            <div class="col-md-4">
+                <label for="user_id" class="form-label">User</label>
+                <select class="form-select" id="user_id" name="user_id">
+                    <option value="">All users</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {{ 'selected' if request.args.get('user_id') == user.id|string }}>
+                        {{ user.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="show_inactive" class="form-label">&nbsp;</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="show_inactive" name="show_inactive" value="1"
+                           {{ 'checked' if request.args.get('show_inactive') }}>
+                    <label class="form-check-label" for="show_inactive">
+                        Show inactive/expired policies
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">&nbsp;</label>
+                <div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-filter"></i> Apply Filters
+                    </button>
+                    <a href="{{ url_for('policies.index') }}" class="btn btn-secondary">Clear</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>User</th>
+                        <th>Server</th>
+                        <th>Protocol</th>
+                        <th>Source IP</th>
+                        <th>SSH Logins</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for policy in policies %}
+                    <tr>
+                        <td>{{ policy.id }}</td>
+                        <td>
+                            <a href="{{ url_for('users.view', user_id=policy.user.id) }}">
+                                <i class="bi bi-person"></i> {{ policy.user.username }}
+                            </a>
+                        </td>
+                        <td>
+                            {% if policy.target_server_id %}
+                                <i class="bi bi-server"></i> {{ policy.target_server.name }}
+                            {% elif policy.target_group_id %}
+                                <i class="bi bi-folder"></i> {{ policy.target_group.name }}
+                            {% else %}
+                                <i class="bi bi-globe"></i> All servers
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if policy.protocol %}
+                                <span class="badge bg-info">{{ policy.protocol|upper }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">ALL</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if policy.source_ip_id and policy.source_ip_ref %}
+                                <code>{{ policy.source_ip_ref.source_ip }}</code>
+                            {% else %}
+                                <span class="text-muted">Any</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if policy.protocol == 'rdp' %}
+                                <span class="text-danger"><i class="bi bi-x-circle"></i></span>
+                            {% elif policy.ssh_logins %}
+                                {% for login in policy.ssh_logins %}
+                                    <span class="badge bg-secondary">{{ login.allowed_login }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">All</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ policy.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>
+                            {% if policy.end_time %}
+                                {{ policy.end_time.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                                <span class="text-muted">Never</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if policy.is_active %}
+                                <span class="badge badge-active">Active</span>
+                            {% else %}
+                                <span class="badge badge-expired">Revoked/Expired</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if policy.is_active %}
+                            <form method="POST" action="{{ url_for('policies.revoke', policy_id=policy.id) }}" 
+                                  style="display: inline;" onsubmit="return confirmDelete('revoke this policy');">
+                                <button type="submit" class="btn btn-sm btn-warning" title="Revoke">
+                                    <i class="bi bi-x-circle"></i> Revoke
+                                </button>
+                            </form>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('policies.delete', policy_id=policy.id) }}" 
+                                  style="display: inline;" onsubmit="return confirmDelete('delete this policy');">
+                                <button type="submit" class="btn btn-sm btn-danger" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2">No policies found. Grant access to users!</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
