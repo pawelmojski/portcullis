@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Add User Group - Jumphost Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-plus-circle"></i> Add User Group</h2>
+    <a href="{{ url_for('user_groups.index') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Group Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" required
+                               placeholder="e.g., admins, developers, operators">
+                        <div class="form-text">Unique identifier for this group</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"
+                                  placeholder="Optional description of this group's purpose"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="parent_group_id" class="form-label">Parent Group</label>
+                        <select class="form-select" id="parent_group_id" name="parent_group_id">
+                            <option value="">-- No Parent (Root Group) --</option>
+                            {% for g in all_groups %}
+                            <option value="{{ g.id }}">
+                                {{ g.name }}
+                                {% if g.parent_group %} (child of {{ g.parent_group.name }}){% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Members of this group will inherit permissions from parent group
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="port_forwarding_allowed" 
+                                   name="port_forwarding_allowed">
+                            <label class="form-check-label" for="port_forwarding_allowed">
+                                Allow Port Forwarding (SSH -L/-R)
+                            </label>
+                        </div>
+                        <div class="form-text">
+                            Members can use SSH port forwarding if enabled
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <strong>Hierarchical Groups:</strong> Members of child groups automatically inherit 
+                        permissions from parent groups. Use this to organize users in a tree structure 
+                        (e.g., root → admins → operators).
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="{{ url_for('user_groups.index') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Create Group
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="bi bi-lightbulb"></i> Tips</h5>
+            </div>
+            <div class="card-body">
+                <ul class="small">
+                    <li>Group names must be unique</li>
+                    <li>Child groups inherit parent permissions</li>
+                    <li>Cycle detection prevents circular references</li>
+                    <li>Root groups have no parent</li>
+                    <li>Port forwarding can be enabled per group</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

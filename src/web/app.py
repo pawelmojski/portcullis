@@ -112,6 +112,7 @@ from blueprints.dashboard import dashboard_bp
 from blueprints.users import users_bp
 from blueprints.servers import servers_bp
 from blueprints.groups import groups_bp
+from blueprints.user_groups import user_groups_bp
 from blueprints.policies import policies_bp
 from blueprints.sessions import sessions_bp
 from blueprints.monitoring import monitoring_bp
@@ -121,6 +122,7 @@ app.register_blueprint(dashboard_bp, url_prefix='/')
 app.register_blueprint(users_bp, url_prefix='/users')
 app.register_blueprint(servers_bp, url_prefix='/servers')
 app.register_blueprint(groups_bp, url_prefix='/groups')
+app.register_blueprint(user_groups_bp, url_prefix='/user-groups')
 app.register_blueprint(policies_bp, url_prefix='/policies')
 app.register_blueprint(sessions_bp, url_prefix='/sessions')
 app.register_blueprint(monitoring_bp, url_prefix='/monitoring')
