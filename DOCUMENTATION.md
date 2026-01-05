@@ -7,7 +7,9 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 ## Quick Links
 
 - **Installation Guide**: [INSTALL.md](INSTALL.md) - Complete setup instructions
-- **PyRDP Patches**: [PYRDP_PATCHES.md](PYRDP_PATCHES.md) - Required modifications for MP4 conversion
+- **PyRDP Patches (Main Venv)**: [PYRDP_PATCHES_MAIN_VENV.md](PYRDP_PATCHES_MAIN_VENV.md) - Access control integration
+- **PyRDP Patches (Converter Venv)**: [PYRDP_PATCHES.md](PYRDP_PATCHES.md) - MP4 conversion patches
+- **Patch Files**: [patches/](patches/) - Unified diff files for automated application
 - **Roadmap**: [ROADMAP.md](ROADMAP.md) - Development history and future plans
 - **Dependencies**: See [requirements.txt](requirements.txt) and [requirements-pyrdp-converter.txt](requirements-pyrdp-converter.txt)
 

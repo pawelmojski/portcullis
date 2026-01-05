@@ -172,11 +172,44 @@ If you get a segmentation fault, check CPU features (see Prerequisites).
 
 ## Step 5: Apply PyRDP Patches
 
-**Critical**: These patches must be applied for MP4 conversion to work!
+**Critical**: PyRDP requires patches in BOTH environments!
+
+### 5.1 Main Venv Patches (Access Control Integration)
+
+See [PYRDP_PATCHES_MAIN_VENV.md](PYRDP_PATCHES_MAIN_VENV.md) for detailed instructions.
+
+```bash
+cd /opt/jumphost
+source venv/bin/activate
+
+# Backup original files
+cp venv/lib/python3.13/site-packages/pyrdp/core/mitm.py{,.orig}
+cp venv/lib/python3.13/site-packages/pyrdp/enum/rdp.py{,.orig}
+cp venv/lib/python3.13/site-packages/pyrdp/mitm/FileMapping.py{,.orig}
+
+# Apply patches (automated)
+patch -p0 < patches/pyrdp_core_mitm.patch
+patch -p0 < patches/pyrdp_enum_rdp.patch
+patch -p0 < patches/pyrdp_mitm_filemapping.patch
+```
+
+**Manual patching** (if automated fails):
+- Edit `core/mitm.py` - Add access control hooks to `buildProtocol()`
+- Edit `enum/rdp.py` - Add `RDP10_12` and `_missing_()` method
+- Edit `mitm/FileMapping.py` - Change `from typing import io` to `BinaryIO`
+
+Verify main venv patches:
+```bash
+grep "JUMPHOST_ENABLED" venv/lib/python3.13/site-packages/pyrdp/core/mitm.py
+grep "RDP10_12" venv/lib/python3.13/site-packages/pyrdp/enum/rdp.py
+grep "BinaryIO" venv/lib/python3.13/site-packages/pyrdp/mitm/FileMapping.py
+```
+
+### 5.2 Converter Venv Patches (MP4 Conversion)
+
+### 5.2 Converter Venv Patches (MP4 Conversion)
 
 See [PYRDP_PATCHES.md](PYRDP_PATCHES.md) for detailed instructions.
-
-### Quick Patch Guide
 
 ```bash
 cd /opt/jumphost
@@ -193,7 +226,7 @@ cp venv-pyrdp-converter/lib/python3.13/site-packages/pyrdp/convert/utils.py{,.or
 # 3. Add 'fps=10' parameter in convert/utils.py
 ```
 
-Verify patches:
+Verify converter venv patches:
 ```bash
 grep "RDP10_12" venv-pyrdp-converter/lib/python3.13/site-packages/pyrdp/enum/rdp.py
 grep "BinaryIO" venv-pyrdp-converter/lib/python3.13/site-packages/pyrdp/mitm/FileMapping.py
