@@ -4,6 +4,13 @@
 
 Self-made SSH/RDP jump host with temporal access control, source IP mapping, session recording, real-time monitoring, and system logging integration.
 
+## Quick Links
+
+- **Installation Guide**: [INSTALL.md](INSTALL.md) - Complete setup instructions
+- **PyRDP Patches**: [PYRDP_PATCHES.md](PYRDP_PATCHES.md) - Required modifications for MP4 conversion
+- **Roadmap**: [ROADMAP.md](ROADMAP.md) - Development history and future plans
+- **Dependencies**: See [requirements.txt](requirements.txt) and [requirements-pyrdp-converter.txt](requirements-pyrdp-converter.txt)
+
 ## Architecture (Current State - v1.3)
 
 ```
@@ -787,6 +794,119 @@ curl http://localhost:5000/monitoring/api/stats/by_user
 - [x] Check .pyrdp recording files
 - [x] Replay session with pyrdp-player
 - [x] Check audit logs in database
+
+---
+
+## Installation & Dependencies
+
+### System Requirements
+
+See [INSTALL.md](INSTALL.md) for complete installation instructions.
+
+**Minimum Requirements**:
+- OS: Debian 13 or similar
+- Python: 3.13+
+- PostgreSQL: 17+
+- RAM: 4GB (8GB recommended for MP4 conversion)
+- Disk: 35GB+ (for recordings)
+- CPU: Host passthrough for Qt/PySide6 (ssse3, sse4.1, sse4.2, popcnt)
+
+### APT Packages
+
+```bash
+# Core dependencies
+sudo apt-get install -y \
+    build-essential \
+    python3-dev \
+    python3-venv \
+    postgresql \
+    postgresql-contrib \
+    libpq-dev \
+    git
+
+# Qt dependencies (for MP4 conversion with PySide6)
+sudo apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    libegl1 \
+    libxkbcommon0 \
+    libdbus-1-3 \
+    libxcb-xinerama0 \
+    libxcb-cursor0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-render-util0
+```
+
+### Python Packages
+
+**Main Environment** (`venv/`):
+```bash
+pip install -r requirements.txt
+```
+
+Key packages:
+- Flask 3.1.2 - Web framework
+- SQLAlchemy 2.0.45 - Database ORM
+- Paramiko 4.0.0 - SSH proxy
+- pyrdp-mitm 2.1.0 - RDP proxy (without PySide6)
+- typer, rich - CLI tools
+- psycopg2-binary - PostgreSQL driver
+
+**MP4 Converter Environment** (`venv-pyrdp-converter/`):
+```bash
+pip install -r requirements-pyrdp-converter.txt
+```
+
+Key packages:
+- PySide6 6.10.1 - Qt for Python (MP4 rendering)
+- av 16.0.1 - Audio/Video processing
+- pyrdp-mitm 2.1.0 - RDP converter
+- qimage2ndarray 1.10.0 - Image conversion
+
+### PyRDP Patches (Critical!)
+
+**Required**: MP4 conversion will NOT work without these patches.
+
+See [PYRDP_PATCHES.md](PYRDP_PATCHES.md) for detailed instructions.
+
+Three patches required in `venv-pyrdp-converter`:
+
+1. **enum/rdp.py** - Add RDP10_12 version support (Windows 11)
+2. **mitm/FileMapping.py** - Python 3.13 compatibility (BinaryIO import)
+3. **convert/utils.py** - FPS optimization (fps=10 parameter)
+
+Verify patches:
+```bash
+cd /opt/jumphost
+source venv-pyrdp-converter/bin/activate
+grep "RDP10_12" venv-pyrdp-converter/lib/python3.13/site-packages/pyrdp/enum/rdp.py
+grep "BinaryIO" venv-pyrdp-converter/lib/python3.13/site-packages/pyrdp/mitm/FileMapping.py
+grep "fps=10" venv-pyrdp-converter/lib/python3.13/site-packages/pyrdp/convert/utils.py
+```
+
+All three commands must return results.
+
+### Proxmox CPU Configuration (Important!)
+
+For PySide6/Qt to work, VM CPU must support SSE instructions:
+
+```bash
+# Edit VM config: /etc/pve/qemu-server/<VMID>.conf
+cpu: host
+
+# Or via GUI: VM → Hardware → Processors → CPU Type: host
+```
+
+Verify:
+```bash
+grep -E "ssse3|sse4_1|sse4_2|popcnt" /proc/cpuinfo | head -1
+```
+
+If empty, MP4 conversion will segfault.
+
+---
 
 ## Contributing
 
