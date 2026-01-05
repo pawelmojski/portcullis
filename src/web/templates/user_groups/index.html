@@ -34,7 +34,6 @@
                         <th>Description</th>
                         <th>Parent Group</th>
                         <th>Members</th>
-                        <th>Port Forwarding</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -59,13 +58,6 @@
                             <span class="badge bg-info">{{ group.members|length }} users</span>
                         </td>
                         <td>
-                            {% if group.port_forwarding_allowed %}
-                                <span class="badge bg-success">Allowed</span>
-                            {% else %}
-                                <span class="badge bg-secondary">Denied</span>
-                            {% endif %}
-                        </td>
-                        <td>
                             <a href="{{ url_for('user_groups.view', group_id=group.id) }}" 
                                class="btn btn-sm btn-info" title="View">
                                 <i class="bi bi-eye"></i>
@@ -84,7 +76,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="6" class="text-center text-muted py-4">
                             <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                             <p class="mt-2">No user groups found. Create your first group!</p>
                         </td>
@@ -101,13 +93,10 @@
 function buildTreeHTML(node, level = 0) {
     const indent = '&nbsp;'.repeat(level * 4);
     const icon = node.children.length > 0 ? '📁' : '📄';
-    const portForwarding = node.port_forwarding_allowed ? 
-        '<span class="badge bg-success ms-2">Port Fwd</span>' : '';
     
     let html = `<div style="margin-left: ${level * 20}px; margin-bottom: 5px;">
         ${icon} <a href="/user-groups/view/${node.id}"><strong>${node.name}</strong></a>
         <span class="badge bg-info">${node.member_count}</span>
-        ${portForwarding}
         <small class="text-muted">${node.description || ''}</small>
     </div>`;
     

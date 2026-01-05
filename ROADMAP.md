@@ -1,18 +1,21 @@
 # Jump Host Project - Roadmap & TODO
 
-## Current Status: v1.3 (RDP MP4 Conversion) - January 2026 ✅
+## Current Status: v1.4 (Recursive Groups & Enhanced Policies) - January 2026 ✅
 
 **Operational Services:**
 - ✅ SSH Proxy: `0.0.0.0:22` (systemd: jumphost-ssh-proxy.service)
 - ✅ RDP Proxy: `0.0.0.0:3389` (systemd: jumphost-rdp-proxy.service)  
 - ✅ Flask Web: `0.0.0.0:5000` (systemd: jumphost-flask.service)
-- ✅ MP4 Workers: 2 instances (systemd: jumphost-mp4-converter@1/2.service) 🎯 NEW
+- ✅ MP4 Workers: 2 instances (systemd: jumphost-mp4-converter@1/2.service)
 - ✅ PostgreSQL: Access Control V2 with policy-based authorization
 - ✅ Session Monitoring: Real-time tracking with live view (SSH + RDP MP4)
 - ✅ Auto-Refresh Dashboard: 5-second updates via AJAX
-- ✅ RDP MP4 Conversion: Background queue with progress tracking 🎯 NEW
+- ✅ RDP MP4 Conversion: Background queue with progress tracking
+- ✅ Recursive User Groups: Hierarchical permissions with inheritance 🎯 NEW
+- ✅ Port Forwarding Control: Per-policy SSH forwarding permissions 🎯 NEW
 
 **Recent Milestones:**
+- v1.4: Recursive Groups & Enhanced Policies (January 2026) ✅ COMPLETED
 - v1.3: RDP MP4 Conversion System (January 2026) ✅ COMPLETED
 - v1.2-dev: RDP Session Viewer (January 2026) ✅ COMPLETED
 - v1.1: Session History & Live View (January 2026) ✅ COMPLETED

@@ -72,8 +72,7 @@ def add():
             group = UserGroup(
                 name=request.form['name'],
                 description=request.form.get('description'),
-                parent_group_id=parent_id,
-                port_forwarding_allowed=request.form.get('port_forwarding_allowed') == 'on'
+                parent_group_id=parent_id
             )
             
             # Validate no cycles (will be None for new group, but check parent chain)
@@ -122,7 +121,6 @@ def edit(group_id):
             group.name = request.form['name']
             group.description = request.form.get('description')
             group.parent_group_id = parent_id
-            group.port_forwarding_allowed = request.form.get('port_forwarding_allowed') == 'on'
             
             db.commit()
             flash(f'Group {group.name} updated successfully!', 'success')
@@ -242,7 +240,6 @@ def api_hierarchy():
             'id': group.id,
             'name': group.name,
             'description': group.description,
-            'port_forwarding_allowed': group.port_forwarding_allowed,
             'member_count': len(group.members),
             'children': [build_node(child) for child in group.child_groups]
         }

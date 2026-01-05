@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, g, request, redirect, url_for, fla
 from flask_login import login_required
 from datetime import datetime, timedelta
 
-from src.core.database import AccessPolicy, User, UserSourceIP, Server, ServerGroup, PolicySSHLogin
+from src.core.database import AccessPolicy, User, UserSourceIP, Server, ServerGroup, PolicySSHLogin, UserGroup
 
 policies_bp = Blueprint('policies', __name__)
 
@@ -46,23 +46,36 @@ def add():
     if request.method == 'POST':
         try:
             # Parse form data
-            user_id = int(request.form['user_id'])
+            grant_type = request.form.get('grant_type', 'user')
+            user_id = request.form.get('user_id')
+            user_group_id = request.form.get('user_group_id')
             scope_type = request.form['scope_type']
             protocol = request.form.get('protocol') or None
             duration_hours = request.form.get('duration_hours')
             source_ip_id = request.form.get('source_ip_id')
+            port_forwarding_allowed = request.form.get('port_forwarding_allowed') == 'on'
             
-            # Calculate end time
+            # Validate: either user_id or user_group_id must be provided
+            if grant_type == 'user' and not user_id:
+                flash('User is required', 'danger')
+                return redirect(url_for('policies.add'))
+            if grant_type == 'group' and not user_group_id:
+                flash('User group is required', 'danger')
+                return redirect(url_for('policies.add'))
+            
+            # Calculate end time (0 = permanent, >0 = hours)
             end_time = None
-            if duration_hours:
+            if duration_hours and int(duration_hours) > 0:
                 end_time = datetime.now() + timedelta(hours=int(duration_hours))
             
             # Create policy
             policy = AccessPolicy(
-                user_id=user_id,
+                user_id=int(user_id) if user_id else None,
+                user_group_id=int(user_group_id) if user_group_id else None,
                 source_ip_id=int(source_ip_id) if source_ip_id else None,
                 scope_type=scope_type,
                 protocol=protocol,
+                port_forwarding_allowed=port_forwarding_allowed,
                 is_active=True,
                 end_time=end_time
             )
@@ -98,10 +111,12 @@ def add():
     
     # GET request - show form
     users = db.query(User).order_by(User.username).all()
+    user_groups = db.query(UserGroup).order_by(UserGroup.name).all()
     servers = db.query(Server).order_by(Server.name).all()
     groups = db.query(ServerGroup).order_by(ServerGroup.name).all()
     
-    return render_template('policies/add.html', users=users, servers=servers, groups=groups)
+    return render_template('policies/add.html', users=users, user_groups=user_groups, 
+                         servers=servers, groups=groups)
 
 @policies_bp.route('/revoke/<int:policy_id>', methods=['POST'])
 @login_required

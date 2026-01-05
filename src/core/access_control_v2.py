@@ -146,21 +146,18 @@ class AccessControlEngineV2:
             
             server = backend_info['server']
             
-            # Step 3: Find matching policies
+            # Step 3: Find matching policies with PRIORITY: user > group
             now = datetime.utcnow()
             
-            # Get all user groups (including parent groups)
-            user_group_ids = get_all_user_groups(user.id, db)
+            # Get all server groups (including parent groups)
+            server_group_ids = get_all_server_groups(server.id, db)
             
-            # Base query: active policies for this user OR any of user's groups within valid time range
-            base_query = db.query(AccessPolicy).filter(
-                or_(
-                    AccessPolicy.user_id == user.id,
-                    AccessPolicy.user_group_id.in_(user_group_ids) if user_group_ids else False
-                ),
+            # PRIORITY 1: Check for direct user policies first
+            user_policies_query = db.query(AccessPolicy).filter(
+                AccessPolicy.user_id == user.id,
                 AccessPolicy.is_active == True,
                 AccessPolicy.start_time <= now,
-                AccessPolicy.end_time >= now
+                or_(AccessPolicy.end_time == None, AccessPolicy.end_time >= now)
             ).filter(
                 # Source IP match: NULL (all IPs) or specific user_source_ip_id
                 or_(
@@ -175,22 +172,95 @@ class AccessControlEngineV2:
                 )
             )
             
-            matching_policies = []
-            
-            # Get all server groups (including parent groups)
-            server_group_ids = get_all_server_groups(server.id, db)
-            
-            for policy in base_query:
-                # Check scope
+            # Check if user has direct policies for this server
+            direct_user_policies = []
+            for policy in user_policies_query:
                 if policy.scope_type == 'group':
-                    # Check if server belongs to target group (recursively)
                     if policy.target_group_id in server_group_ids:
-                        matching_policies.append(policy)
-                        
+                        direct_user_policies.append(policy)
                 elif policy.scope_type in ('server', 'service'):
-                    # Direct server match
                     if policy.target_server_id == server.id:
-                        matching_policies.append(policy)
+                        direct_user_policies.append(policy)
+            
+            # If user has direct policies, use ONLY those (ignore group inheritance)
+            if direct_user_policies:
+                matching_policies = direct_user_policies
+                logger.debug(f"Using {len(direct_user_policies)} direct user policies (ignoring groups)")
+                
+                # For SSH, filter by login BEFORE proceeding
+                # If direct policy exists but login not allowed - DENY (no fallback to groups)
+                if protocol == 'ssh' and ssh_login:
+                    valid_policies = []
+                    for policy in matching_policies:
+                        allowed_logins = db.query(PolicySSHLogin).filter(
+                            PolicySSHLogin.policy_id == policy.id
+                        ).all()
+                        
+                        # No restrictions = all logins allowed
+                        if not allowed_logins:
+                            valid_policies.append(policy)
+                        else:
+                            # Check if requested login is in allowed list
+                            for login in allowed_logins:
+                                if login.allowed_login == ssh_login:
+                                    valid_policies.append(policy)
+                                    break
+                    
+                    if not valid_policies:
+                        logger.warning(
+                            f"Access denied: Login '{ssh_login}' not allowed for {user.username} "
+                            f"to {server.name} (user has direct policy, group inheritance blocked)"
+                        )
+                        return {
+                            'has_access': False,
+                            'user': user,
+                            'user_ip': user_ip,
+                            'server': server,
+                            'policies': matching_policies,
+                            'reason': f'SSH login "{ssh_login}" not allowed by direct user policy'
+                        }
+                    
+                    matching_policies = valid_policies
+            else:
+                # PRIORITY 2: No direct user policies, check group policies
+                user_group_ids = get_all_user_groups(user.id, db)
+                
+                if not user_group_ids:
+                    logger.warning(
+                        f"Access denied: No direct policies and no groups for {user.username}"
+                    )
+                    return {
+                        'has_access': False,
+                        'user': user,
+                        'user_ip': user_ip,
+                        'server': server,
+                        'policies': [],
+                        'reason': 'No matching policy (user or group)'
+                    }
+                
+                group_policies_query = db.query(AccessPolicy).filter(
+                    AccessPolicy.user_group_id.in_(user_group_ids),
+                    AccessPolicy.is_active == True,
+                    AccessPolicy.start_time <= now,
+                    or_(AccessPolicy.end_time == None, AccessPolicy.end_time >= now)
+                ).filter(
+                    # Protocol match: NULL (all protocols) or specific
+                    or_(
+                        AccessPolicy.protocol == None,
+                        AccessPolicy.protocol == protocol
+                    )
+                )
+                
+                matching_policies = []
+                for policy in group_policies_query:
+                    if policy.scope_type == 'group':
+                        if policy.target_group_id in server_group_ids:
+                            matching_policies.append(policy)
+                    elif policy.scope_type in ('server', 'service'):
+                        if policy.target_server_id == server.id:
+                            matching_policies.append(policy)
+                
+                logger.debug(f"Using {len(matching_policies)} group policies (no direct user policies)")
             
             if not matching_policies:
                 logger.warning(
@@ -206,8 +276,9 @@ class AccessControlEngineV2:
                     'reason': f'No matching access policy'
                 }
             
-            # Step 4: For SSH, check login restrictions
-            if protocol == 'ssh' and ssh_login:
+            # Step 4: For SSH with group policies, check login restrictions
+            # (Direct user policies already filtered ssh_login above)
+            if protocol == 'ssh' and ssh_login and not direct_user_policies:
                 valid_policies = []
                 for policy in matching_policies:
                     allowed_logins = db.query(PolicySSHLogin).filter(
@@ -227,7 +298,7 @@ class AccessControlEngineV2:
                 if not valid_policies:
                     logger.warning(
                         f"Access denied: Login '{ssh_login}' not allowed for {user.username} "
-                        f"to {server.name}"
+                        f"to {server.name} (group policies)"
                     )
                     return {
                         'has_access': False,
@@ -235,7 +306,7 @@ class AccessControlEngineV2:
                         'user_ip': user_ip,
                         'server': server,
                         'policies': matching_policies,
-                        'reason': f'SSH login "{ssh_login}" not allowed by policy'
+                        'reason': f'SSH login "{ssh_login}" not allowed by group policy'
                     }
                 
                 matching_policies = valid_policies

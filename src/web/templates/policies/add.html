@@ -15,11 +15,19 @@
         <div class="card">
             <div class="card-body">
                 <form method="POST" action="{{ url_for('policies.add') }}" id="policyForm">
-                    <h5 class="mb-3">1. Select User</h5>
+                    <h5 class="mb-3">1. Select User or Group</h5>
                     
                     <div class="mb-3">
+                        <label for="grant_type" class="form-label">Grant Type <span class="required">*</span></label>
+                        <select class="form-select" id="grant_type" name="grant_type" required onchange="toggleGrantType()">
+                            <option value="user">Individual User</option>
+                            <option value="group">User Group</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="userField">
                         <label for="user_id" class="form-label">User <span class="required">*</span></label>
-                        <select class="form-select" id="user_id" name="user_id" required onchange="loadUserIPs()">
+                        <select class="form-select" id="user_id" name="user_id" onchange="loadUserIPs()">
                             <option value="">Select a user...</option>
                             {% for user in users %}
                             <option value="{{ user.id }}" {{ 'selected' if request.args.get('user_id') == user.id|string }}>
@@ -29,22 +37,35 @@
                         </select>
                     </div>
                     
-                    <div class="mb-3">
+                    <div class="mb-3" id="userGroupField" style="display: none;">
+                        <label for="user_group_id" class="form-label">User Group <span class="required">*</span></label>
+                        <select class="form-select" id="user_group_id" name="user_group_id">
+                            <option value="">Select a group...</option>
+                            {% for group in user_groups %}
+                            <option value="{{ group.id }}">
+                                {{ group.name }} ({{ group.members|length }} members)
+                                {% if group.parent_group %} - child of {{ group.parent_group.name }}{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="sourceIpField">
                         <label for="source_ip_id" class="form-label">Source IP</label>
                         <select class="form-select" id="source_ip_id" name="source_ip_id">
                             <option value="">ANY (all source IPs)</option>
                         </select>
-                        <small class="form-text text-muted">Leave as ANY or select specific source IP</small>
+                        <small class="form-text text-muted">Leave as ANY or select specific source IP (only for individual users)</small>
                     </div>
                     
                     <hr class="my-4">
                     
-                    <h5 class="mb-3">2. Select Scope</h5>
+                    <h5 class="mb-3">2. Select Server</h5>
                     
                     <div class="mb-3">
-                        <label for="scope_type" class="form-label">Scope Type <span class="required">*</span></label>
+                        <label for="scope_type" class="form-label">Server Type <span class="required">*</span></label>
                         <select class="form-select" id="scope_type" name="scope_type" required onchange="toggleScopeFields()">
-                            <option value="">Select scope type...</option>
+                            <option value="">Select server type...</option>
                             <option value="group">Server Group (all servers in group)</option>
                             <option value="server">Single Server</option>
                             <option value="service">Single Service (server + protocol)</option>
@@ -95,7 +116,24 @@
                     
                     <hr class="my-4">
                     
-                    <h5 class="mb-3">4. Time Configuration</h5>
+                    <h5 class="mb-3">4. Additional Permissions</h5>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="port_forwarding_allowed" 
+                                   name="port_forwarding_allowed">
+                            <label class="form-check-label" for="port_forwarding_allowed">
+                                <i class="bi bi-arrow-left-right"></i> Allow SSH Port Forwarding
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Enable local/remote port forwarding and dynamic SOCKS proxy (ssh -L, -R, -D)
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
+                    <h5 class="mb-3">5. Time Configuration</h5>
                     
                     <div class="row">
                         <div class="col-md-6 mb-3">
@@ -106,8 +144,8 @@
                         <div class="col-md-6 mb-3">
                             <label for="duration_hours" class="form-label">Duration (hours)</label>
                             <input type="number" class="form-control" id="duration_hours" name="duration_hours" 
-                                   min="1" placeholder="24">
-                            <small class="form-text text-muted">Leave empty for permanent access</small>
+                                   min="0" value="1" placeholder="1">
+                            <small class="form-text text-muted">Default: 1 hour. Set to 0 for permanent access</small>
                         </div>
                     </div>
                     
@@ -128,7 +166,30 @@
 
 {% block extra_js %}
 <script>
-// Already in app.js, but include inline for clarity
+function toggleGrantType() {
+    const grantType = document.getElementById('grant_type').value;
+    const userField = document.getElementById('userField');
+    const userGroupField = document.getElementById('userGroupField');
+    const sourceIpField = document.getElementById('sourceIpField');
+    
+    if (grantType === 'user') {
+        userField.style.display = 'block';
+        userGroupField.style.display = 'none';
+        sourceIpField.style.display = 'block';
+        document.getElementById('user_id').required = true;
+        document.getElementById('user_group_id').required = false;
+        document.getElementById('user_group_id').value = '';
+    } else {
+        userField.style.display = 'none';
+        userGroupField.style.display = 'block';
+        sourceIpField.style.display = 'none';
+        document.getElementById('user_id').required = false;
+        document.getElementById('user_group_id').required = true;
+        document.getElementById('user_id').value = '';
+        document.getElementById('source_ip_id').value = '';
+    }
+}
+
 function toggleScopeFields() {
     const scopeType = document.getElementById('scope_type').value;
     const groupField = document.getElementById('groupField');

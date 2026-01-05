@@ -203,7 +203,6 @@ class UserGroup(Base):
     name = Column(String(255), unique=True, nullable=False, index=True)
     description = Column(Text)
     parent_group_id = Column(Integer, ForeignKey("user_groups.id", ondelete="SET NULL"), index=True)
-    port_forwarding_allowed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships
@@ -254,6 +253,9 @@ class AccessPolicy(Base):
     
     # Protocol filter (NULL = all protocols, 'ssh', 'rdp')
     protocol = Column(String(10))
+    
+    # Port forwarding permission
+    port_forwarding_allowed = Column(Boolean, default=False, nullable=False)
     
     # Temporal access
     start_time = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
