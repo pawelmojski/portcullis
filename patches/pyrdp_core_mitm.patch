@@ -1,0 +1,286 @@
+--- /tmp/venv-pyrdp-original/lib/python3.13/site-packages/pyrdp/core/mitm.py	2026-01-05 10:02:44.361723500 +0000
++++ /opt/jumphost/venv/lib/python3.13/site-packages/pyrdp/core/mitm.py	2026-01-04 15:24:20.014661207 +0000
+@@ -3,8 +3,12 @@
+ # Copyright (C) 2020-2023 GoSecure Inc.
+ # Licensed under the GPLv3 or later.
+ #
++# MODIFIED FOR JUMPHOST: Added dynamic backend routing and access control
++#
+ import logging
+ import random
++import sys
++from copy import deepcopy
+ 
+ from twisted.internet.protocol import ServerFactory
+ import namesgenerator
+@@ -12,10 +16,24 @@
+ from pyrdp.mitm import MITMConfig, RDPMITM
+ from pyrdp.logging import LOGGER_NAMES, SessionLogger
+ 
++# Add jumphost path for imports
++sys.path.insert(0, '/opt/jumphost/src')
++try:
++    from core.database import SessionLocal, AuditLog, IPAllocation, Session as DBSession
++    from core.access_control_v2 import AccessControlEngineV2
++    from core.utmp_helper import write_utmp_login, write_utmp_logout
++    from datetime import datetime
++    import os
++    JUMPHOST_ENABLED = True
++except ImportError:
++    JUMPHOST_ENABLED = False
++    logging.warning("Jumphost modules not found, running in standard mode")
++
+ 
+ class MITMServerFactory(ServerFactory):
+     """
+     Server factory for the RDP man-in-the-middle that generates a unique session ID for every connection.
++    MODIFIED: Includes dynamic backend routing and access control for jumphost.
+     """
+ 
+     def __init__(self, config: MITMConfig):
+@@ -23,6 +41,9 @@
+         :param config: the MITM configuration
+         """
+         self.config = config
++        if JUMPHOST_ENABLED:
++            self.access_control = AccessControlEngineV2()
++            logging.getLogger(LOGGER_NAMES.MITM_CONNECTIONS).info("Jumphost access control V2 enabled")
+ 
+     def buildProtocol(self, addr):
+         sessionID = f"{namesgenerator.get_random_name()}_{random.randrange(1000000,9999999)}"
+@@ -35,6 +56,232 @@
+         crawlerLogger = logging.getLogger(LOGGER_NAMES.CRAWLER)
+         crawlerLogger = SessionLogger(crawlerLogger, sessionID)
+ 
+-        mitm = RDPMITM(mainlogger, crawlerLogger, self.config)
+-
+-        return mitm.getProtocol()
++        # JUMPHOST MODIFICATION: Dynamic backend routing and access control
++        if JUMPHOST_ENABLED:
++            source_ip = addr.host
++            
++            mainlogger.info(f"New RDP connection from {source_ip}")
++            
++            # Create MITM with placeholder config - will be configured in connectionMade
++            mitm = RDPMITM(mainlogger, crawlerLogger, self.config)
++            protocol = mitm.getProtocol()
++            
++            # Store jumphost info on protocol for later use
++            protocol._jumphost_source_ip = source_ip
++            protocol._jumphost_access_control = self.access_control
++            protocol._jumphost_mainlogger = mainlogger
++            protocol._jumphost_mitm = mitm  # Store MITM instance to access state
++            
++            # Wrap connectionMade to inject access control check
++            original_connectionMade = protocol.connectionMade
++            
++            def jumphost_connectionMade():
++                # IMPORTANT: Always call original connectionMade first to initialize PyRDP state
++                # Otherwise statCounter and other components won't be initialized
++                original_connectionMade()
++                
++                # Extract destination IP from socket
++                from twisted.internet import reactor
++                try:
++                    sock = protocol.transport.socket
++                    dest_ip = sock.getsockname()[0]
++                    
++                    mainlogger.info(f"RDP connection: {source_ip} -> {dest_ip}")
++                    
++                    # Perform access control check
++                    db = SessionLocal()
++                    try:
++                        # Find backend by destination IP
++                        backend_lookup = protocol._jumphost_access_control.find_backend_by_proxy_ip(db, dest_ip)
++                        if not backend_lookup:
++                            mainlogger.error(f"No backend server found for destination IP {dest_ip}")
++                            db.close()
++                            # Close connection asynchronously to let PyRDP finish initialization
++                            reactor.callLater(0, protocol.transport.loseConnection)
++                            return
++                        
++                        backend_server = backend_lookup['server']
++                        mainlogger.info(f"Destination IP {dest_ip} maps to backend {backend_server.ip_address}")
++                        
++                        # Check access with V2 engine
++                        result = protocol._jumphost_access_control.check_access_v2(db, source_ip, dest_ip, 'rdp')
++                        
++                        if not result['has_access']:
++                            mainlogger.warning(f"ACCESS DENIED: {source_ip} -> {dest_ip} - {result['reason']}")
++                            
++                            audit = AuditLog(
++                                action='rdp_access_denied',
++                                source_ip=source_ip,
++                                resource_type='rdp_server',
++                                details=f"Access denied: {result['reason']}",
++                                success=False
++                            )
++                            db.add(audit)
++                            db.commit()
++                            db.close()
++                            
++                            # Close connection asynchronously
++                            reactor.callLater(0, protocol.transport.loseConnection)
++                            return
++                        
++                        user = result['user']
++                        grant_server = result['server']
++                        
++                        mainlogger.info(f"ACCESS GRANTED: {user.username} ({source_ip}) -> {grant_server.ip_address}")
++                        mainlogger.info(f"Matching policies: {result.get('policy_count', 0)}")
++                        
++                        # Update MITM state to target correct backend
++                        # This is done AFTER original connectionMade but BEFORE connectToServer() is triggered
++                        protocol._jumphost_mitm.state.effectiveTargetHost = grant_server.ip_address
++                        protocol._jumphost_mitm.state.effectiveTargetPort = 3389
++                        
++                        mainlogger.info(f"Backend configured: {grant_server.ip_address}:3389")
++                        
++                        # Check if there's already an active session for this source_ip + backend
++                        # RDP clients often open multiple TCP connections for the same session
++                        # But only consider sessions started within last 10 seconds as part of same RDP session
++                        from datetime import timedelta
++                        recent_threshold = datetime.utcnow() - timedelta(seconds=10)
++                        
++                        existing_session = db.query(DBSession).filter(
++                            DBSession.source_ip == source_ip,
++                            DBSession.backend_ip == grant_server.ip_address,
++                            DBSession.protocol == 'rdp',
++                            DBSession.is_active == True,
++                            DBSession.started_at >= recent_threshold
++                        ).first()
++                        
++                        if existing_session:
++                            mainlogger.info(f"Reusing existing session {existing_session.session_id} (ID: {existing_session.id}) - RDP multiplex connection")
++                            # Don't create a new session, reuse existing
++                            protocol._jumphost_session_id = existing_session.session_id
++                            protocol._jumphost_db_session_id = existing_session.id
++                            protocol._jumphost_user = user
++                            protocol._jumphost_server = grant_server
++                            protocol._jumphost_dest_ip = dest_ip
++                            protocol._jumphost_is_multiplexed = True
++                        else:
++                            # Create session record in database
++                            db_session = DBSession(
++                                session_id=sessionID,
++                                user_id=user.id,
++                                server_id=grant_server.id,
++                                protocol='rdp',
++                                source_ip=source_ip,
++                                proxy_ip=dest_ip,
++                                backend_ip=grant_server.ip_address,
++                                backend_port=3389,
++                                started_at=datetime.utcnow(),
++                                is_active=True,
++                                recording_path=None  # Will be set later when recording path is known
++                            )
++                            db.add(db_session)
++                            db.commit()
++                            db.refresh(db_session)
++                            mainlogger.info(f"Session {sessionID} tracked in database (ID: {db_session.id})")
++                            
++                            # Write to utmp/wtmp (makes session visible in 'w' command)
++                            tty_name = f"rdp{db_session.id % 100}"  # rdp0-rdp99
++                            backend_display = f"{grant_server.name}"
++                            write_utmp_login(sessionID, user.username, tty_name, source_ip, backend_display)
++                            mainlogger.info(f"Session {sessionID} registered in utmp as {tty_name}")
++                            
++                            # Store session info for later cleanup
++                            protocol._jumphost_session_id = sessionID
++                            protocol._jumphost_db_session_id = db_session.id
++                            protocol._jumphost_user = user
++                            protocol._jumphost_server = grant_server
++                            protocol._jumphost_dest_ip = dest_ip
++                            protocol._jumphost_is_multiplexed = False
++                        
++                        # Add additional observer to TCPMITM client layer for session cleanup
++                        tcp_mitm = protocol._jumphost_mitm.tcp
++                        
++                        mainlogger.info(f"Adding session cleanup observer for session {sessionID}")
++                        
++                        def jumphost_onClientDisconnection(reason):
++                            mainlogger.info(f"[JUMPHOST] Client disconnection observer called for session {sessionID}")
++                            
++                            # Only close session if this is not a multiplexed connection
++                            if not getattr(protocol, '_jumphost_is_multiplexed', False):
++                                db = SessionLocal()
++                                try:
++                                    session = db.query(DBSession).filter(DBSession.id == protocol._jumphost_db_session_id).first()
++                                    if session and session.is_active:
++                                        mainlogger.info(f"Closing session {sessionID} in database")
++                                        session.is_active = False
++                                        session.ended_at = datetime.utcnow()
++                                        if session.started_at:
++                                            session.duration_seconds = int((session.ended_at - session.started_at).total_seconds())
++                                        session.termination_reason = 'normal'
++                                        
++                                        # Try to get recording file size
++                                        if tcp_mitm.recorder.recordFilename:
++                                            session.recording_path = tcp_mitm.recorder.recordFilename
++                                            try:
++                                                if os.path.exists(tcp_mitm.recorder.recordFilename):
++                                                    session.recording_size = os.path.getsize(tcp_mitm.recorder.recordFilename)
++                                            except Exception as e:
++                                                mainlogger.debug(f"Could not get recording size: {e}")
++                                        
++                                        db.commit()
++                                        mainlogger.info(f"Session {sessionID} closed in database (duration: {session.duration_seconds}s)")
++                                        
++                                        # Write logout to utmp/wtmp
++                                        tty_name = f"rdp{session.id % 100}"
++                                        write_utmp_logout(tty_name, protocol._jumphost_user.username)
++                                        mainlogger.info(f"Session {sessionID} removed from utmp")
++                                        
++                                    else:
++                                        mainlogger.warning(f"Session {protocol._jumphost_db_session_id} not found or already closed")
++                                except Exception as e:
++                                    mainlogger.error(f"Error closing session in database: {e}", exc_info=True)
++                                finally:
++                                    db.close()
++                            else:
++                                mainlogger.info(f"Multiplexed connection closed for session {protocol._jumphost_session_id}, not closing session")
++                        
++                        def jumphost_onServerDisconnection(reason):
++                            mainlogger.info(f"[JUMPHOST] Server disconnection observer called for session {sessionID}")
++                            # Same logic as client disconnection
++                            jumphost_onClientDisconnection(reason)
++                        
++                        # Create additional observers for both client and server disconnection
++                        # Store references to prevent garbage collection
++                        protocol._jumphost_client_observer = tcp_mitm.client.createObserver(
++                            onDisconnection=jumphost_onClientDisconnection
++                        )
++                        protocol._jumphost_server_observer = tcp_mitm.server.createObserver(
++                            onDisconnection=jumphost_onServerDisconnection
++                        )
++                        mainlogger.info(f"Session cleanup observers installed for session {sessionID}")
++                        
++                        # Audit log
++                        audit = AuditLog(
++                            action='rdp_access_granted',
++                            source_ip=source_ip,
++                            user_id=user.id,
++                            resource_type='rdp_server',
++                            resource_id=grant_server.id,
++                            details=f"User {user.username} connected to {grant_server.ip_address} via {dest_ip}",
++                            success=True
++                        )
++                        db.add(audit)
++                        db.commit()
++                        db.close()
++                        
++                    except Exception as e:
++                        mainlogger.error(f"Error in access control: {e}", exc_info=True)
++                        db.close()
++                        reactor.callLater(0, protocol.transport.loseConnection)
++                        
++                except Exception as e:
++                    mainlogger.error(f"Error extracting destination IP: {e}", exc_info=True)
++                    reactor.callLater(0, protocol.transport.loseConnection)
++            
++            protocol.connectionMade = jumphost_connectionMade
++            return protocol
++        else:
++            # Standard PyRDP behavior (jumphost disabled)
++            mitm = RDPMITM(mainlogger, crawlerLogger, self.config)
++            return mitm.getProtocol()
