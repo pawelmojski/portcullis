@@ -1,6 +1,6 @@
 # Jump Host Project - Roadmap & TODO
 
-## Current Status: v1.7.5 (Connection Attempts Logging) - January 2026 ✅
+## Current Status: v1.8 (Mega-Wyszukiwarka) - January 2026 ✅
 
 **Operational Services:**
 - ✅ SSH Proxy: `0.0.0.0:22` (systemd: jumphost-ssh-proxy.service)
@@ -20,9 +20,11 @@
 - ✅ Policy Audit Trail: Full change history with JSONB snapshots 🎯
 - ✅ Policy Editing: Edit schedules without revoke/recreate 🎯
 - ✅ Schedule Display: Tooltips showing all time windows 🎯
-- ✅ **Connection Tracking**: policy_id, denial_reason, protocol_version 🎯 NEW v1.7.5
+- ✅ Connection Tracking: policy_id, denial_reason, protocol_version 🎯
+- ✅ **Mega-Wyszukiwarka**: Universal search with 11+ filters, auto-refresh, CSV export 🎯 NEW v1.8
 
 **Recent Milestones:**
+- v1.8: Mega-Wyszukiwarka (January 2026) ✅ COMPLETED
 - v1.7.5: Connection Attempts Logging (January 2026) ✅ COMPLETED
 - v1.7: Policy Audit Trail & Edit System (January 2026) ✅ COMPLETED
 - v1.6: Schedule-Based Access Control (January 2026) ✅ COMPLETED
@@ -143,6 +145,139 @@ Live view available in web GUI
 - Added tooltips with dd-mm-yyyy format to all timestamps
 - Fixed JSONL recording to write immediately (not at session end)
 - Fixed Flask becoming slow (added caching)
+
+---
+
+## ✅ COMPLETED: v1.8 - Mega-Wyszukiwarka (January 2026)
+
+### 🎯 Goals Delivered
+
+#### 1. Universal Search System 🎯
+**Problem**: Brak centralnego miejsca do wyszukiwania sesji/polityk/użytkowników/serwerów.
+**Solution**: Mega-wyszukiwarka z 11+ filtrami dynamicznymi i smart search detection.
+
+**Features**:
+- **Smart Search**: Auto-detektuje IP (`10.0.1.5`), policy ID (`#42`, `policy:42`), protokół (`ssh`, `rdp`), username
+- **Filtry**: user_id, user_group_id, server_id, server_group_id, protocol, policy_id, connection_status, denial_reason, source_ip, has_port_forwarding, is_active, time_from/to, min/max_duration, scope_type, forwarding_type
+- **Zakładki**: Sesje, Polityki (Port Forwards usunięty - pokazywany jako atrybut sesji)
+- **Quick Filters**: Active/Closed, Denied/Granted, With/Without Port Forwarding
+- **Advanced Filters**: 12 dropdowns + time/duration inputs (collapsible)
+- **Auto-Refresh**: Co 2 sekundy z wizualnym wskaźnikiem (spinning icon)
+- **Pagination**: 50 wyników/strona z manual query string building
+- **CSV Export**: Dla sesji i polityk z property headers (max 10K wierszy)
+- **Klikalne wiersze**: Cała sesja to link do session details
+- **Port Forwarding Column**: Ikona `<i class="fas fa-exchange-alt"></i>` + licznik w tabeli sesji
+
+**Routes**:
+- `GET /search/` - Main search page with dynamic filters
+- `GET /search/export` - CSV export for active tab
+
+**Smart Search Examples**:
+```
+10.0.1.5          → Szuka w source_ip, Server.ip_address
+#42               → Policy ID 42
+policy:15         → Policy ID 15
+ssh               → Protocol filter
+rdp               → Protocol filter
+username          → Szuka w User.username, Server.name
+las.init1.pl      → Generic text search (wszystkie pola)
+```
+
+#### 2. Denied Sessions Logging 🎯
+**Problem**: Sesje denied (brak polityki, out of window) nie były logowane do bazy.
+**Solution**: SSH proxy loguje denied sessions w `check_auth_none()` i `check_auth_password()`.
+
+**DBSession Fields**:
+- `connection_status='denied'`
+- `denial_reason` - machine codes: `outside_schedule`, `no_matching_policy`, `policy_expired`, `wrong_source_ip`, etc.
+- `denial_details` - human-readable explanation
+- `policy_id` - tracks which policy denied/granted access
+- `started_at=ended_at` - immediate denial
+- `is_active=False`
+
+**Example Denied Session**:
+```python
+denied_session = DBSession(
+    session_id=str(uuid.uuid4()),
+    user_id=user.id if user else None,
+    server_id=server.id if server else None,
+    connection_status='denied',
+    denial_reason='outside_schedule',
+    denial_details='Access denied: Current time not in schedule',
+    policy_id=policy.id if policy else None,
+    started_at=datetime.utcnow(),
+    ended_at=datetime.utcnow(),
+    is_active=False
+)
+```
+
+#### 3. Enhanced Session Details 🎯
+**Problem**: Session view nie pokazywał dlaczego sesja była denied.
+**Solution**: Dodano denial_reason, denial_details, connection_status badges.
+
+**Status Badges**:
+- `denied` → `<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Connection Denied</span>`
+- `active` → `<span class="badge bg-success"><i class="fas fa-circle"></i> Aktywna</span>`
+- `closed` → `<span class="badge bg-secondary"><i class="far fa-circle"></i> Zamknięta</span>`
+
+**Denial Info**:
+- Reason: `<span class="badge bg-warning text-dark">{{ denial_reason }}</span>`
+- Details: `<small class="text-muted">{{ denial_details }}</small>`
+- Protocol Version: `<code>SSH-2.0-OpenSSH_9.2p1</code>`
+
+#### 4. Database Schema Enhancements 🎯
+**New Relationship**:
+```python
+# Session model
+transfers = relationship("SessionTransfer", back_populates="session")
+
+# SessionTransfer model
+session = relationship("Session", back_populates="transfers")
+```
+
+**Benefits**:
+- Eager loading: `query.options(joinedload(DBSession.transfers))`
+- Template access: `{% set pf_count = session.transfers|selectattr('transfer_type', 'in', ['port_forward_local', ...])|list|length %}`
+- Eliminuje subqueries w każdym wierszu tabeli
+
+#### 5. UI/UX Improvements 🎯
+- **Usunięto zbędne kolumny**: ID, Akcje (niepotrzebne, tylko szum)
+- **Klikalne wiersze**: `<tr onclick="window.location.href='...'">` - cała sesja to link
+- **Port Forwarding jako atrybut**: Kolumna w tabeli sesji zamiast osobnej zakładki (logiczne)
+- **Auto-refresh indicator**: `<i class="fas fa-sync-alt fa-spin"> Auto-refresh aktywny (co 2s)`
+- **outerjoin**: Obsługa denied sessions bez pełnych danych user/server
+
+### 📁 New Files Created
+- `/opt/jumphost/src/web/search.py` (605 lines) - Search blueprint z query builderami
+- `/opt/jumphost/src/web/templates/search/index.html` (637 lines) - Search UI z JavaScript
+
+### 🗑️ Removed
+- Port Forwards tab - usunięty (port forwarding pokazywany jako kolumna w Sesjach)
+
+### 📊 Testing Results
+- ✅ Smart search detection dla IP/policy_id/protocol/username/text
+- ✅ Wszystkie 11+ filtrów działają poprawnie
+- ✅ Auto-refresh co 2s z fetch() API
+- ✅ CSV export dla sesji i polityk (max 10K rows)
+- ✅ Denied sessions logowane poprawnie (check_auth_none + check_auth_password)
+- ✅ Port forwarding count wyświetla się jako ikona + licznik
+- ✅ Klikalne wiersze sesji (onclick navigation)
+- ✅ outerjoin dla User/Server (obsługa denied sessions)
+
+### 🐛 Issues Fixed
+- **Import errors**: PortForwarding → SessionTransfer, user_group_membership → UserGroupMember, get_session → SessionLocal
+- **Schema mismatches**: Server.hostname → Server.name, Server.address → Server.ip_address, AccessPolicy.target_server_group → AccessPolicy.target_group, AccessPolicy.description → AccessPolicy.reason
+- **Endpoint names**: sessions.session_detail → sessions.view, policies.view_policy → policies.edit
+- **URL parameter duplication**: `url_for('search.search', tab=tab, **request.args)` → manual query string building
+- **Policy status check**: `policy.end_time > request.args.get('_now', '2026-01-06')|datetime` → simplified datetime comparison
+- **Missing relationship**: Session.transfers <-> SessionTransfer.session (back_populates added)
+
+### 🎨 Code Quality
+- **Query builders**: 3 separate functions (sessions, policies, port_forwards) - clean separation
+- **Smart detection**: `smart_detect_search_term()` - auto-detects search type
+- **Recursive groups**: `get_users_in_group()`, `get_servers_in_group()` - BFS traversal
+- **Manual pagination**: Query string building bez parameter duplication
+- **Auto-refresh**: JavaScript fetch() z error handling i visual indicator
 
 ---
 
