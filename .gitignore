@@ -8,6 +8,9 @@ venv/
 env/
 ENV/
 
+# Test files
+test_*
+
 # Logs
 logs/
 *.log
