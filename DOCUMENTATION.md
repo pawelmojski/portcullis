@@ -539,6 +539,22 @@ policy.port_forwarding_allowed = True
   - [x] Welcome message showing grant validity
   - [x] Only for interactive shell sessions (not SCP/SFTP)
   - [x] Enhanced grant form (minutes, datetime pickers, UTC)
+- [x] **Immediate Rejection for No Grant** 🎯 NEW (v1.5)
+  - [x] Pre-auth grant checking in `check_auth_none()`
+  - [x] Friendly ASCII banner showing denial reason
+  - [x] No password prompt (publickey-only auth)
+  - [x] Early detection before authentication attempts
+- [x] **Flexible Duration Parser** 🎯 NEW (v1.5)
+  - [x] Human-readable duration formats: `30m`, `2h`, `1.5d`, `1w`, `1M`
+  - [x] Combined formats: `1h30m`, `2d12h`, `1w3d`
+  - [x] Single text field instead of separate hours/minutes
+  - [x] Support for permanent grants (`0` or `permanent`)
+  - [x] Parser module: `src/core/duration_parser.py`
+- [x] **Scheduled Grants** 🎯 NEW (v1.5)
+  - [x] Absolute time mode with start_time and end_time
+  - [x] Future grants shown as "Scheduled" in policy list
+  - [x] Active grants filter includes future grants (not expired)
+  - [x] Elegant dropdown selector (Duration/Absolute) instead of radio buttons
 
 ### RDP Proxy ✓
 - [x] PyRDP MITM with session recording and real-time tracking ⭐

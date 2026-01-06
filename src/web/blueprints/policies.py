@@ -6,6 +6,7 @@ from flask_login import login_required
 from datetime import datetime, timedelta
 
 from src.core.database import AccessPolicy, User, UserSourceIP, Server, ServerGroup, PolicySSHLogin, UserGroup
+from src.core.duration_parser import parse_duration, format_duration
 
 policies_bp = Blueprint('policies', __name__)
 
@@ -24,10 +25,9 @@ def index():
     
     if not show_expired:
         now = datetime.utcnow()
-        # Show only active policies: now >= start_time AND (end_time IS NULL OR end_time > now)
+        # Show policies that haven't expired yet (end_time > now OR end_time IS NULL)
+        # This includes future grants (start_time > now) - they will be shown as "scheduled"
         query = query.filter(
-            (AccessPolicy.start_time == None) | (AccessPolicy.start_time <= now)
-        ).filter(
             (AccessPolicy.end_time == None) | (AccessPolicy.end_time > now)
         )
     
@@ -84,17 +84,28 @@ def add():
             end_time = None
             
             if duration_type == 'duration':
-                # Duration in hours and minutes
-                duration_hours = int(request.form.get('duration_hours', 0))
-                duration_minutes = int(request.form.get('duration_minutes', 0))
-                total_minutes = duration_hours * 60 + duration_minutes
+                # Parse human-readable duration
+                duration_text = request.form.get('duration_text', '').strip()
                 
-                if total_minutes > 0:
-                    end_time = start_time + timedelta(minutes=total_minutes)
-                # else: permanent (end_time = None)
+                if duration_text:
+                    total_minutes = parse_duration(duration_text)
+                    
+                    if total_minutes is None:
+                        flash(f'Invalid duration format: "{duration_text}". Examples: 30m, 2h, 1d, 1.5h, 2d12h', 'danger')
+                        return redirect(url_for('policies.add'))
+                    
+                    if total_minutes > 0:
+                        end_time = start_time + timedelta(minutes=total_minutes)
+                    # else: permanent (end_time = None)
+                # else: permanent (no duration specified)
                 
             elif duration_type == 'absolute':
-                # Specific end date/time
+                # Specific start and end date/time
+                absolute_start_time_str = request.form.get('absolute_start_time')
+                if absolute_start_time_str:
+                    start_time = datetime.strptime(absolute_start_time_str, '%Y-%m-%dT%H:%M')
+                # else: start_time already set to utcnow() or from form
+                
                 end_time_str = request.form.get('end_time')
                 if end_time_str:
                     end_time = datetime.strptime(end_time_str, '%Y-%m-%dT%H:%M')

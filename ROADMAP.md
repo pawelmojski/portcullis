@@ -138,6 +138,138 @@ Live view available in web GUI
 
 ---
 
+## ✅ COMPLETED: v1.5 - UX Improvements & Access Control (January 2026)
+
+### 🎯 Goals Delivered
+
+#### 1. Immediate Rejection for No Grant 🎯
+**Problem**: Users without grants were prompted for password 3 times before disconnection.
+**Solution**: 
+- Pre-auth grant checking in `check_auth_none()` (called before password prompt)
+- Early access check in `SSHProxyHandler.__init__()` for banner preparation
+- Friendly ASCII banner displayed immediately:
+  ```
+  +====================================================================+
+  |                          ACCESS DENIED                             |
+  +====================================================================+
+  
+    Dear user,
+  
+    There is no active access grant for your IP address:
+      100.64.0.20
+  
+    Reason: No matching access policy
+  
+    Please contact your administrator to request access.
+  
+    Have a nice day!
+  ```
+- Returns only "publickey" auth method (no password prompt)
+- User sees banner and immediate "Permission denied (publickey)" - no password attempts
+
+**Technical Details**:
+- `get_banner()` returns tuple `(message, "en-US")` per paramiko ServerInterface
+- `check_auth_none()` checks access via `check_access_v2()` before auth negotiation
+- `get_allowed_auths()` returns `"publickey"` only when no grant (prevents password prompt)
+- Banner sent during SSH protocol negotiation (before authentication)
+
+**Files Changed**:
+- `src/proxy/ssh_proxy.py`: Added `check_auth_none()`, modified `get_banner()`, `get_allowed_auths()`
+
+#### 2. Flexible Duration Parser 🎯
+**Problem**: Grant duration limited to max 59 minutes, required separate hours/minutes fields.
+**Solution**: Human-readable duration parser with single text field
+
+**Supported Formats**:
+- **Simple**: `30m`, `2h`, `5d`, `1w`, `1M`, `1y`
+- **Decimal**: `1.5h` (90 min), `2.5d` (60 hours)
+- **Combined**: `1h30m`, `2d12h`, `1w3d`, `1y6M`
+- **Readable**: `30min`, `2hours`, `5days`
+- **Special**: `0`, `permanent`
+
+**Examples**:
+```
+30m       → 30 minutes
+2h        → 120 minutes (2 hours)
+1.5h      → 90 minutes
+1d        → 1440 minutes (24 hours)
+1w        → 10080 minutes (7 days)
+1M        → 43200 minutes (30 days)
+1h30m     → 90 minutes
+2d12h30m  → 3630 minutes (2 days 12 hours 30 min)
+1y6M      → 784800 minutes (1.5 years)
+permanent → 0 (no expiry)
+```
+
+**Technical Details**:
+- Parser: `src/core/duration_parser.py`
+- Functions: `parse_duration(str) → int`, `format_duration(int) → str`
+- Regex pattern: `(\d+(?:\.\d+)?)\s*([a-zA-Z]+)`
+- Special handling for 'M' (month) vs 'm' (minute): converts `1M` → `1mo` before lowercasing
+- Unit conversions: y=525600, M=43200, w=10080, d=1440, h=60, m=1
+
+**Files Changed**:
+- `src/core/duration_parser.py`: New module
+- `src/web/blueprints/policies.py`: Import parser, use `parse_duration()`
+- `src/web/templates/policies/add.html`: Single text field instead of two number inputs
+
+#### 3. Scheduled Grants (Future Start Time) 🎯
+**Problem**: Grants could only start immediately or at specific end time.
+**Solution**: Absolute time mode with both start_time and end_time
+
+**Features**:
+- **Duration Mode**: Relative time (e.g., `2h`, `1d`) - starts now
+- **Absolute Mode**: Specific start AND end dates/times
+- **Scheduled Badge**: Future grants shown with blue "Scheduled" badge in policy list
+- **Active Grants Filter**: Changed to show non-expired grants (not just currently active)
+  - Old: `start_time <= now AND end_time > now`
+  - New: `end_time > now OR end_time IS NULL`
+  - Result: Scheduled grants visible in Active Grants list
+
+**UI Improvements**:
+- Dropdown selector (Duration/Absolute) instead of 3 radio buttons
+- Removed "Permanent" button - use `0` or `permanent` in Duration field
+- Absolute mode shows two datetime-local fields:
+  - Start Date/Time (optional - defaults to now)
+  - End Date/Time (required)
+
+**Technical Details**:
+- `absolute_start_time` form field for scheduled grants
+- Backend parses `absolute_start_time` if provided, otherwise uses `utcnow()`
+- Policy query filter updated to include future grants
+- Template already had "Scheduled" badge logic: `policy.start_time > now`
+
+**Files Changed**:
+- `src/web/blueprints/policies.py`: Parse `absolute_start_time`, update query filter
+- `src/web/templates/policies/add.html`: Dropdown selector, dual datetime fields for absolute mode
+
+#### 4. SCP/SFTP Transfer Logging 🎯
+**Problem**: SCP/SFTP sessions recorded binary data to transcripts.
+**Solution**: 
+- Disable session recording for SCP/SFTP (no binary data in transcripts)
+- Track transfers in `session_transfers` table with byte counts
+- Modern `scp` uses SFTP subsystem - detected and logged as `sftp_session`
+
+**Technical Details**:
+- Detection: Check `subsystem == 'sftp'` or `exec_command` contains `scp`
+- Transfer logging: `log_sftp_transfer()` creates record, `update_transfer_stats()` adds byte counts
+- Database constraint: Added `'sftp_session'` to `check_transfer_type_valid`
+- No recorder for file transfers: `recorder = None` when `should_record = False`
+
+**Files Changed**:
+- `src/proxy/ssh_proxy.py`: Moved recorder creation after channel type detection, added SFTP logging
+- `src/core/database.py`: Added `sftp_session` to CHECK constraint
+
+### 📊 Summary Statistics
+
+**Features Delivered**: 4 major improvements
+**Lines Changed**: ~300 lines across 5 files
+**New Modules**: 1 (`duration_parser.py`)
+**User Experience**: Dramatically improved (no password prompts, flexible durations, scheduled grants)
+**Code Quality**: Cleaner, more maintainable (single duration field, early rejection pattern)
+
+---
+
 ## ✅ COMPLETED: v1.4 - SSH Port Forwarding & Policy Enhancements (January 2026)
 
 ### 🎯 Goal: Complete SSH Port Forwarding Support (-L, -R, -D)

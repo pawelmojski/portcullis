@@ -148,6 +148,262 @@
         </div>
     </div>
 
+    <!-- File Transfers & Port Forwarding -->
+    {% if session.protocol == 'ssh' and transfers %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">
+                <i class="bi bi-arrow-left-right"></i>
+                File Transfers & Port Forwarding
+                <span class="badge bg-light text-dark ms-2">{{ transfers|length }}</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <!-- SFTP Sessions (scp via sftp) -->
+            {% set sftp_sessions = transfers|selectattr('transfer_type', '==', 'sftp_session')|list %}
+            {% if sftp_sessions %}
+            <h6 class="text-muted mb-3">
+                <i class="bi bi-hdd-network"></i>
+                SFTP Sessions ({{ sftp_sessions|length }})
+            </h6>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Started</th>
+                            <th>Duration</th>
+                            <th>Data Transferred</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transfer in sftp_sessions %}
+                        <tr>
+                            <td>{{ transfer.started_at|localtime }}</td>
+                            <td>
+                                {% if transfer.ended_at %}
+                                    {% set duration = (transfer.ended_at - transfer.started_at).total_seconds() %}
+                                    {% if duration < 60 %}
+                                        {{ "%.1f"|format(duration) }}s
+                                    {% else %}
+                                        {{ "%d"|format(duration // 60) }}m {{ "%d"|format(duration % 60) }}s
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-warning">Active</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set total_bytes = (transfer.bytes_sent or 0) + (transfer.bytes_received or 0) %}
+                                {% if total_bytes > 0 %}
+                                    <i class="bi bi-arrow-up text-success"></i> 
+                                    {% if transfer.bytes_sent < 1024 %}
+                                        {{ transfer.bytes_sent }} B
+                                    {% elif transfer.bytes_sent < 1048576 %}
+                                        {{ "%.2f"|format(transfer.bytes_sent / 1024) }} KB
+                                    {% elif transfer.bytes_sent < 1073741824 %}
+                                        {{ "%.2f"|format(transfer.bytes_sent / 1048576) }} MB
+                                    {% else %}
+                                        {{ "%.2f"|format(transfer.bytes_sent / 1073741824) }} GB
+                                    {% endif %}
+                                    
+                                    <i class="bi bi-arrow-down text-primary ms-3"></i> 
+                                    {% if transfer.bytes_received < 1024 %}
+                                        {{ transfer.bytes_received }} B
+                                    {% elif transfer.bytes_received < 1048576 %}
+                                        {{ "%.2f"|format(transfer.bytes_received / 1024) }} KB
+                                    {% elif transfer.bytes_received < 1073741824 %}
+                                        {{ "%.2f"|format(transfer.bytes_received / 1048576) }} MB
+                                    {% else %}
+                                        {{ "%.2f"|format(transfer.bytes_received / 1073741824) }} GB
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">No data transferred</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <!-- SCP/SFTP File Transfers -->
+            {% set file_transfers = transfers|selectattr('transfer_type', 'in', ['scp_upload', 'scp_download', 'sftp_upload', 'sftp_download'])|list %}
+            {% if file_transfers %}
+            <h6 class="text-muted mb-3">
+                <i class="bi bi-file-earmark-arrow-up-fill"></i>
+                File Transfers ({{ file_transfers|length }})
+            </h6>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>File Path</th>
+                            <th>Size</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transfer in file_transfers %}
+                        <tr>
+                            <td>
+                                {% if 'upload' in transfer.transfer_type %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-upload"></i> Upload
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-primary">
+                                        <i class="bi bi-download"></i> Download
+                                    </span>
+                                {% endif %}
+                                <small class="text-muted ms-1">
+                                    {% if 'scp' in transfer.transfer_type %}SCP{% else %}SFTP{% endif %}
+                                </small>
+                            </td>
+                            <td><code>{{ transfer.file_path }}</code></td>
+                            <td>
+                                {% if transfer.file_size %}
+                                    {% if transfer.file_size < 1024 %}
+                                        {{ transfer.file_size }} B
+                                    {% elif transfer.file_size < 1048576 %}
+                                        {{ "%.2f"|format(transfer.file_size / 1024) }} KB
+                                    {% elif transfer.file_size < 1073741824 %}
+                                        {{ "%.2f"|format(transfer.file_size / 1048576) }} MB
+                                    {% else %}
+                                        {{ "%.2f"|format(transfer.file_size / 1073741824) }} GB
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ transfer.started_at|localtime }}</td>
+                            <td>
+                                {% if transfer.ended_at %}
+                                    {% set duration = (transfer.ended_at - transfer.started_at).total_seconds() %}
+                                    {% if duration < 60 %}
+                                        {{ "%.1f"|format(duration) }}s
+                                    {% else %}
+                                        {{ "%d"|format(duration // 60) }}m {{ "%d"|format(duration % 60) }}s
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-warning">In Progress</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <!-- Port Forwarding -->
+            {% set port_forwards = transfers|selectattr('transfer_type', 'in', ['port_forward_local', 'port_forward_remote'])|list %}
+            {% if port_forwards %}
+            <h6 class="text-muted mb-3">
+                <i class="bi bi-arrow-left-right-circle"></i>
+                Port Forwarding ({{ port_forwards|length }})
+            </h6>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Local</th>
+                            <th>Remote</th>
+                            <th>Data Transferred</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transfer in port_forwards %}
+                        <tr>
+                            <td>
+                                {% if transfer.transfer_type == 'port_forward_local' %}
+                                    <span class="badge bg-primary">-L Local</span>
+                                {% else %}
+                                    <span class="badge bg-success">-R Remote</span>
+                                {% endif %}
+                            </td>
+                            <td><code>{{ transfer.local_addr }}:{{ transfer.local_port }}</code></td>
+                            <td><code>{{ transfer.remote_addr }}:{{ transfer.remote_port }}</code></td>
+                            <td>
+                                {% set total_bytes = (transfer.bytes_sent or 0) + (transfer.bytes_received or 0) %}
+                                {% if total_bytes > 0 %}
+                                    <span class="text-success">↑ {{ "%.2f"|format((transfer.bytes_sent or 0) / 1048576) }} MB</span>
+                                    <span class="text-primary">↓ {{ "%.2f"|format((transfer.bytes_received or 0) / 1048576) }} MB</span>
+                                {% else %}
+                                    <span class="text-muted">No data</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if transfer.ended_at %}
+                                    {% set duration = (transfer.ended_at - transfer.started_at).total_seconds() %}
+                                    {{ "%d"|format(duration // 60) }}m {{ "%d"|format(duration % 60) }}s
+                                {% else %}
+                                    <span class="badge bg-warning">Active</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <!-- SOCKS Connections -->
+            {% set socks_conns = transfers|selectattr('transfer_type', 'eq', 'socks_connection')|list %}
+            {% if socks_conns %}
+            <h6 class="text-muted mb-3">
+                <i class="bi bi-globe"></i>
+                SOCKS Proxy Connections ({{ socks_conns|length }})
+            </h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Destination</th>
+                            <th>Data Transferred</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transfer in socks_conns %}
+                        <tr>
+                            <td><code>{{ transfer.remote_addr }}:{{ transfer.remote_port }}</code></td>
+                            <td>
+                                {% set total_bytes = (transfer.bytes_sent or 0) + (transfer.bytes_received or 0) %}
+                                {% if total_bytes > 0 %}
+                                    <span class="text-success">↑ {{ "%.2f"|format((transfer.bytes_sent or 0) / 1024) }} KB</span>
+                                    <span class="text-primary">↓ {{ "%.2f"|format((transfer.bytes_received or 0) / 1024) }} KB</span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ transfer.started_at|localtime }}</td>
+                            <td>
+                                {% if transfer.ended_at %}
+                                    {% set duration = (transfer.ended_at - transfer.started_at).total_seconds() %}
+                                    {% if duration < 60 %}
+                                        {{ "%.1f"|format(duration) }}s
+                                    {% else %}
+                                        {{ "%d"|format(duration // 60) }}m {{ "%d"|format(duration % 60) }}s
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-warning">Active</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Session Recording/Log -->
     {% if file_exists or (is_active and session.protocol == 'ssh') %}
     <div class="card shadow-sm mb-4">

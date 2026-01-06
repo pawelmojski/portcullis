@@ -494,10 +494,17 @@ def view(session_id):
     """View session details and log"""
     db = SessionLocal()
     try:
+        from src.core.database import SessionTransfer
+        
         session = db.query(Session).filter(Session.session_id == session_id).first()
         
         if not session:
             abort(404)
+        
+        # Get transfer details (SCP/SFTP/port forwarding/SOCKS)
+        transfers = db.query(SessionTransfer).filter(
+            SessionTransfer.session_id == session.id
+        ).order_by(SessionTransfer.started_at).all()
         
         # Parse recording based on protocol
         recording_data = None
@@ -517,6 +524,7 @@ def view(session_id):
         
         return render_template('sessions/view.html',
                              session=session,
+                             transfers=transfers,
                              recording_data=recording_data,
                              recording_info=recording_info,
                              file_exists=file_exists,

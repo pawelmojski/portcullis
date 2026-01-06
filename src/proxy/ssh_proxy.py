@@ -23,6 +23,7 @@ from src.core.database import SessionLocal, User, Server, AccessGrant, Session a
 from src.core.access_control_v2 import AccessControlEngineV2 as AccessControl
 from src.core.ip_pool import IPPoolManager
 from src.core.utmp_helper import write_utmp_login, write_utmp_logout
+from src.core.database import SessionTransfer
 
 # Logging
 logging.basicConfig(
@@ -121,6 +122,37 @@ class SSHProxyHandler(paramiko.ServerInterface):
         self.client_password = None
         self.client_key = None
         self.agent_channel = None  # For agent forwarding
+        self.no_grant_reason = None  # Reason for no grant (for banner message)
+        
+        # EARLY grant check - BEFORE get_banner() is called
+        # We check if source IP has ANY policy for this dest (any username)
+        # This allows us to show banner early if IP has no access at all
+        logger.info(f"SSHProxyHandler init: early check for {source_ip} -> {dest_ip}")
+        try:
+            backend_lookup = self.access_control.find_backend_by_proxy_ip(self.db, self.dest_ip)
+            if not backend_lookup:
+                logger.warning(f"No backend found for {self.dest_ip}")
+                self.no_grant_reason = "No backend server configuration found"
+            else:
+                # Quick check: does this source IP have ANY active grant to this backend?
+                # We use empty username - check_access_v2 will look for any matching policy
+                result = self.access_control.check_access_v2(
+                    self.db,
+                    self.source_ip,
+                    self.dest_ip,
+                    'ssh',
+                    ''  # Empty username = check for any grant from this IP
+                )
+                
+                if not result['has_access']:
+                    logger.warning(f"No grant for IP {self.source_ip} to {self.dest_ip}: {result['reason']}")
+                    self.no_grant_reason = result.get('reason', 'No active grant found for your IP address')
+                else:
+                    logger.info(f"Grant found for {self.source_ip}, proceeding with auth")
+                    
+        except Exception as e:
+            logger.error(f"Error in early grant check: {e}", exc_info=True)
+        
         # PTY parameters from client
         self.pty_term = None
         self.pty_width = None
@@ -130,6 +162,57 @@ class SSHProxyHandler(paramiko.ServerInterface):
         self.channel_type = None  # 'shell', 'exec', or 'subsystem'
         self.exec_command = None
         self.subsystem_name = None
+        self.ssh_login = None  # SSH login name for backend
+        # Port forwarding destinations
+        self.forward_destinations = {}  # chanid -> (host, port)
+        
+    def check_auth_none(self, username: str):
+        """Check 'none' authentication - called first before any real auth
+        
+        This is the perfect place to reject users without grants EARLY,
+        before they are prompted for password.
+        
+        Return AUTH_FAILED to proceed with other auth methods.
+        Return AUTH_SUCCESSFUL only if auth should succeed without password.
+        """
+        logger.info(f"check_auth_none called for {username} from {self.source_ip}")
+        
+        # Pre-check: does this user have ANY active policy?
+        try:
+            backend_lookup = self.access_control.find_backend_by_proxy_ip(self.db, self.dest_ip)
+            if not backend_lookup:
+                logger.warning(f"No backend found for {self.dest_ip}, denying {username} from {self.source_ip}")
+                self.no_grant_reason = "No backend server configuration found"
+                logger.info(f"check_auth_none: SET no_grant_reason='{self.no_grant_reason}'")
+                # Return FAILED but banner will be shown
+                return paramiko.AUTH_FAILED
+            
+            logger.info(f"check_auth_none: backend found, checking access...")
+            # Quick access check
+            result = self.access_control.check_access_v2(
+                self.db,
+                self.source_ip,
+                self.dest_ip,
+                'ssh',
+                username
+            )
+            
+            logger.info(f"check_auth_none: access check result: has_access={result['has_access']}, reason={result.get('reason')}")
+            
+            if not result['has_access']:
+                logger.warning(f"No grant for {username} from {self.source_ip}: {result['reason']}")
+                self.no_grant_reason = result.get('reason', 'No active grant found')
+                logger.info(f"check_auth_none: SET no_grant_reason='{self.no_grant_reason}'")
+                # Return FAILED - user will be disconnected after banner
+                return paramiko.AUTH_FAILED
+            
+            logger.info(f"check_auth_none: access granted, proceeding with normal auth")
+                
+        except Exception as e:
+            logger.error(f"Error checking grants in check_auth_none: {e}", exc_info=True)
+        
+        # Grant exists - proceed with normal auth flow
+        return paramiko.AUTH_FAILED  # Still need password/key
         
     def check_auth_password(self, username: str, password: str):
         """Check password authentication"""
@@ -154,6 +237,8 @@ class SSHProxyHandler(paramiko.ServerInterface):
         
         if not result['has_access']:
             logger.warning(f"Access denied for {username} from {self.source_ip}: {result['reason']}")
+            # Store reason for banner
+            self.no_grant_reason = result.get('reason', 'No active grant found for your IP address')
             return paramiko.AUTH_FAILED
         
         # All checks passed
@@ -196,6 +281,8 @@ class SSHProxyHandler(paramiko.ServerInterface):
         
         if not result['has_access']:
             logger.warning(f"Access denied for {username} from {self.source_ip}: {result['reason']}")
+            # Store reason for banner
+            self.no_grant_reason = result.get('reason', 'No active grant found for your IP address')
             return paramiko.AUTH_FAILED
         
         # Accept pubkey - backend will verify agent forwarding works
@@ -212,8 +299,50 @@ class SSHProxyHandler(paramiko.ServerInterface):
         return paramiko.AUTH_SUCCESSFUL
     
     def get_allowed_auths(self, username):
-        """Return allowed authentication methods"""
+        """Return allowed authentication methods
+        
+        This is called AFTER check_auth_none. If check_auth_none already
+        determined there's no grant, we return ONLY "publickey" (which will fail)
+        to prevent password prompt from appearing.
+        """
+        if self.no_grant_reason:
+            logger.info(f"get_allowed_auths: no grant detected, returning 'publickey' only (will fail)")
+            return "publickey"
+        
+        logger.info(f"get_allowed_auths: grant OK, allowing publickey,password")
         return "publickey,password"
+    
+    def get_banner(self):
+        """Return SSH banner message
+        
+        If user has no grant, return a polite rejection message.
+        Must return tuple (banner, language) - default is (None, None).
+        """
+        logger.info(f"get_banner called, no_grant_reason={self.no_grant_reason}")
+        if self.no_grant_reason:
+            banner = (
+                f"\r\n"
+                f"+====================================================================+\r\n"
+                f"|                          ACCESS DENIED                             |\r\n"
+                f"+====================================================================+\r\n"
+                f"\r\n"
+                f"  Dear user,\r\n"
+                f"\r\n"
+                f"  There is no active access grant for your IP address:\r\n"
+                f"    {self.source_ip}\r\n"
+                f"\r\n"
+                f"  Reason: {self.no_grant_reason}\r\n"
+                f"\r\n"
+                f"  Please contact your administrator to request access.\r\n"
+                f"\r\n"
+                f"  Have a nice day!\r\n"
+                f"\r\n"
+            )
+            logger.info(f"get_banner returning banner message ({len(banner)} chars)")
+            return (banner, "en-US")
+        
+        # No banner - return default as per paramiko docs
+        return (None, None)
     
     def check_channel_request(self, kind: str, chanid: int):
         """Allow session, direct-tcpip (port forwarding -L) and dynamic-tcpip (SOCKS -D) channel requests"""
@@ -363,8 +492,19 @@ class SSHProxyServer:
             key.write_private_key_file(str(key_file))
             return key
     
-    def forward_channel(self, client_channel, backend_channel, recorder: SSHSessionRecorder):
+    def forward_channel(self, client_channel, backend_channel, recorder: SSHSessionRecorder = None, db_session_id=None, is_sftp=False):
         """Forward data between client and backend server via SSH channels"""
+        bytes_sent = 0
+        bytes_received = 0
+        sftp_transfer_id = None
+        
+        # For SFTP, create transfer record
+        if is_sftp and db_session_id:
+            try:
+                sftp_transfer_id = self.log_sftp_transfer(db_session_id)
+            except Exception as e:
+                logger.error(f"Failed to create SFTP transfer record: {e}")
+        
         try:
             while True:
                 # Check if channels are still open
@@ -378,19 +518,31 @@ class SSHProxyServer:
                     if len(data) == 0:
                         break
                     backend_channel.send(data)
-                    recorder.record_event('client_to_server', data.decode('utf-8', errors='ignore'))
+                    bytes_sent += len(data)
+                    if recorder:
+                        recorder.record_event('client_to_server', data.decode('utf-8', errors='ignore'))
                 
                 if backend_channel in r:
                     data = backend_channel.recv(4096)
                     if len(data) == 0:
                         break
                     client_channel.send(data)
-                    recorder.record_event('server_to_client', data.decode('utf-8', errors='ignore'))
+                    bytes_received += len(data)
+                    if recorder:
+                        recorder.record_event('server_to_client', data.decode('utf-8', errors='ignore'))
         
         except Exception as e:
             logger.debug(f"Channel forwarding ended: {e}")
         
         finally:
+            # Update SFTP transfer stats
+            if is_sftp and sftp_transfer_id:
+                try:
+                    self.update_transfer_stats(sftp_transfer_id, bytes_sent, bytes_received)
+                    logger.info(f"SFTP transfer completed: sent={bytes_sent} bytes, received={bytes_received} bytes")
+                except Exception as e:
+                    logger.error(f"Failed to update SFTP transfer stats: {e}")
+            
             # Give client time to send DISCONNECT message
             import time
             time.sleep(0.1)
@@ -442,6 +594,24 @@ class SSHProxyServer:
                     dest_addr, dest_port = destination
                     logger.info(f"Forwarding channel {chanid} to {dest_addr}:{dest_port}")
                     
+                    # Log port forward to database
+                    transfer_id = None
+                    db_session = getattr(server_handler, 'db_session', None)
+                    if db_session:
+                        try:
+                            # Get local address/port from channel
+                            local_addr, local_port = channel.getpeername() if hasattr(channel, 'getpeername') else ('unknown', 0)
+                            transfer_id = self.log_port_forward(
+                                db_session.id,
+                                'port_forward_local',  # -L
+                                local_addr,
+                                local_port,
+                                dest_addr,
+                                dest_port
+                            )
+                        except Exception as e:
+                            logger.error(f"Failed to log port forward: {e}")
+                    
                     # Open corresponding channel on backend
                     try:
                         # For direct-tcpip, we need to connect from backend to the target
@@ -454,7 +624,7 @@ class SSHProxyServer:
                         # Start forwarding in a new thread
                         forward_thread = threading.Thread(
                             target=self.forward_port_channel,
-                            args=(channel, backend_channel, dest_addr, dest_port),
+                            args=(channel, backend_channel, dest_addr, dest_port, transfer_id),
                             daemon=True
                         )
                         forward_thread.start()
@@ -600,8 +770,11 @@ class SSHProxyServer:
             logger.error(f"Reverse forward channel error: {e}")
             backend_channel.close()
     
-    def forward_port_channel(self, client_channel, backend_channel, dest_addr, dest_port):
+    def forward_port_channel(self, client_channel, backend_channel, dest_addr, dest_port, transfer_id=None):
         """Forward data between port forwarding channels (no recording)"""
+        bytes_sent = 0
+        bytes_received = 0
+        
         try:
             logger.info(f"Forwarding data for {dest_addr}:{dest_port}")
             
@@ -616,18 +789,28 @@ class SSHProxyServer:
                     if len(data) == 0:
                         break
                     backend_channel.send(data)
+                    bytes_sent += len(data)
                 
                 if backend_channel in r:
                     data = backend_channel.recv(4096)
                     if len(data) == 0:
                         break
                     client_channel.send(data)
+                    bytes_received += len(data)
         
         except Exception as e:
             logger.debug(f"Port forward channel ended: {e}")
         
         finally:
-            logger.info(f"Closing forward channel for {dest_addr}:{dest_port}")
+            logger.info(f"Closing forward channel for {dest_addr}:{dest_port} (sent={bytes_sent}, received={bytes_received})")
+            
+            # Update transfer stats in database
+            if transfer_id:
+                try:
+                    self.update_transfer_stats(transfer_id, bytes_sent, bytes_received)
+                except Exception as e:
+                    logger.error(f"Failed to update transfer stats: {e}")
+            
             try:
                 if not client_channel.closed:
                     client_channel.close()
@@ -1234,6 +1417,121 @@ class SSHProxyServer:
         except Exception as e:
             logger.error(f"Session {session_id}: Error in grant expiry monitor: {e}", exc_info=True)
     
+    def log_scp_transfer(self, db_session_id, command, direction):
+        """Log SCP file transfer"""
+        try:
+            # Parse SCP command: scp [-r] [-t|-f] [file]
+            # -t = to (upload), -f = from (download)
+            import re
+            
+            # Extract file path from command
+            match = re.search(r'scp\s+(?:-\w+\s+)*([^\s]+)', command)
+            if not match:
+                return
+            
+            file_path = match.group(1)
+            
+            db = SessionLocal()
+            try:
+                transfer = SessionTransfer(
+                    session_id=db_session_id,
+                    transfer_type=f'scp_{direction}',
+                    file_path=file_path,
+                    started_at=datetime.utcnow()
+                )
+                db.add(transfer)
+                db.commit()
+                logger.info(f"Logged SCP {direction}: {file_path}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Failed to log SCP transfer: {e}")
+    
+    def log_sftp_transfer(self, db_session_id):
+        """Log SFTP transfer session (without individual file details)"""
+        try:
+            db = SessionLocal()
+            try:
+                transfer = SessionTransfer(
+                    session_id=db_session_id,
+                    transfer_type='sftp_session',
+                    started_at=datetime.utcnow()
+                )
+                db.add(transfer)
+                db.commit()
+                db.refresh(transfer)
+                logger.info(f"Started SFTP transfer tracking (ID: {transfer.id})")
+                return transfer.id
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Failed to log SFTP transfer: {e}")
+            return None
+    
+    def log_port_forward(self, db_session_id, forward_type, local_addr, local_port, remote_addr, remote_port):
+        """Log port forwarding channel"""
+        try:
+            db = SessionLocal()
+            try:
+                transfer = SessionTransfer(
+                    session_id=db_session_id,
+                    transfer_type=forward_type,
+                    local_addr=local_addr,
+                    local_port=local_port,
+                    remote_addr=remote_addr,
+                    remote_port=remote_port,
+                    started_at=datetime.utcnow()
+                )
+                db.add(transfer)
+                db.commit()
+                db.refresh(transfer)
+                logger.info(f"Logged {forward_type}: {local_addr}:{local_port} -> {remote_addr}:{remote_port}")
+                return transfer.id
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Failed to log port forward: {e}")
+            return None
+    
+    def log_socks_connection(self, db_session_id, remote_addr, remote_port):
+        """Log SOCKS proxy connection"""
+        try:
+            db = SessionLocal()
+            try:
+                transfer = SessionTransfer(
+                    session_id=db_session_id,
+                    transfer_type='socks_connection',
+                    remote_addr=remote_addr,
+                    remote_port=remote_port,
+                    started_at=datetime.utcnow()
+                )
+                db.add(transfer)
+                db.commit()
+                db.refresh(transfer)
+                logger.info(f"Logged SOCKS connection: {remote_addr}:{remote_port}")
+                return transfer.id
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Failed to log SOCKS connection: {e}")
+            return None
+    
+    def update_transfer_stats(self, transfer_id, bytes_sent, bytes_received):
+        """Update transfer statistics"""
+        try:
+            db = SessionLocal()
+            try:
+                transfer = db.query(SessionTransfer).filter(SessionTransfer.id == transfer_id).first()
+                if transfer:
+                    transfer.bytes_sent = (transfer.bytes_sent or 0) + bytes_sent
+                    transfer.bytes_received = (transfer.bytes_received or 0) + bytes_received
+                    transfer.ended_at = datetime.utcnow()
+                    db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Failed to update transfer stats: {e}")
+    
     def handle_client(self, client_socket, client_addr):
         """Handle incoming client connection"""
         source_ip = client_addr[0]
@@ -1261,6 +1559,9 @@ class SSHProxyServer:
             channel = transport.accept(20)
             if channel is None:
                 logger.warning(f"No channel opened from {source_ip}")
+                # If no_grant_reason is set, banner was already shown
+                if server_handler.no_grant_reason:
+                    logger.info(f"Connection rejected due to no grant: {server_handler.no_grant_reason}")
                 return
             
             # Get authenticated user and target server
@@ -1271,10 +1572,6 @@ class SSHProxyServer:
             
             user = server_handler.authenticated_user
             target_server = server_handler.target_server
-            
-            # Start session recording
-            recorder = SSHSessionRecorder(session_id, user.username, target_server.ip_address)
-            recorder.record_event('session_start', f"User {user.username} connecting to {target_server.ip_address}")
             
             # Connect to backend server via SSH
             logger.info(f"Connecting to backend: {target_server.ip_address}:22")
@@ -1427,9 +1724,34 @@ class SSHProxyServer:
                 subsys_name = server_handler.subsystem_name.decode('utf-8') if isinstance(server_handler.subsystem_name, bytes) else server_handler.subsystem_name
                 logger.info(f"Invoking subsystem on backend: {subsys_name}")
                 backend_channel.invoke_subsystem(subsys_name)
+                
+                # For SFTP, we'll log transfers by monitoring data flow
+                # Note: Full SFTP parsing would require decoding the binary protocol
+                if subsys_name == 'sftp':
+                    logger.info(f"SFTP subsystem started - transfers will be logged")
             else:
                 # For interactive shell sessions
                 backend_channel.invoke_shell()
+            
+            # Determine if we should record this session
+            # SCP/SFTP sessions should NOT be recorded (only tracked in SessionTransfer)
+            should_record = True
+            if server_handler.channel_type == 'exec' and server_handler.exec_command:
+                cmd_str = server_handler.exec_command.decode('utf-8') if isinstance(server_handler.exec_command, bytes) else server_handler.exec_command
+                if 'scp' in cmd_str:
+                    should_record = False
+                    logger.info(f"SCP session detected - disabling recording, will track in transfers only")
+            elif server_handler.channel_type == 'subsystem' and server_handler.subsystem_name:
+                subsys = server_handler.subsystem_name.decode('utf-8') if isinstance(server_handler.subsystem_name, bytes) else server_handler.subsystem_name
+                if subsys == 'sftp':
+                    should_record = False
+                    logger.info(f"SFTP session detected - disabling recording, will track in transfers only")
+            
+            # Start session recording (only for interactive sessions)
+            recorder = None
+            if should_record:
+                recorder = SSHSessionRecorder(session_id, user.username, target_server.ip_address)
+                recorder.record_event('session_start', f"User {user.username} connecting to {target_server.ip_address}")
             
             # Create session record in database
             db_session = DBSession(
@@ -1446,12 +1768,26 @@ class SSHProxyServer:
                 ssh_agent_used=bool(server_handler.agent_channel),
                 started_at=datetime.utcnow(),
                 is_active=True,
-                recording_path=recorder.recording_file if hasattr(recorder, 'recording_file') else None
+                recording_path=recorder.recording_file if recorder and hasattr(recorder, 'recording_file') else None
             )
             db.add(db_session)
             db.commit()
             db.refresh(db_session)
             logger.info(f"Session {session_id} tracked in database (ID: {db_session.id})")
+            
+            # Pass db_session to server_handler for port forwarding logging
+            server_handler.db_session = db_session
+            
+            # Log SCP transfers (now that we have db_session.id)
+            if server_handler.channel_type == 'exec' and server_handler.exec_command:
+                cmd_str = server_handler.exec_command.decode('utf-8') if isinstance(server_handler.exec_command, bytes) else server_handler.exec_command
+                if 'scp' in cmd_str:
+                    if '-t' in cmd_str:
+                        # SCP upload (to server)
+                        self.log_scp_transfer(db_session.id, cmd_str, 'upload')
+                    elif '-f' in cmd_str:
+                        # SCP download (from server)
+                        self.log_scp_transfer(db_session.id, cmd_str, 'download')
             
             # Write to utmp/wtmp (makes session visible in 'w' command)
             tty_name = f"ssh{db_session.id % 100}"  # ssh0-ssh99
@@ -1514,15 +1850,18 @@ class SSHProxyServer:
                     monitor_thread.start()
                     logger.info(f"Session {session_id}: Started grant expiry monitor thread")
             
-            # Forward traffic
-            self.forward_channel(channel, backend_channel, recorder)
+            # Forward traffic (with SFTP tracking if applicable)
+            is_sftp = (server_handler.channel_type == 'subsystem' and 
+                      server_handler.subsystem_name and 
+                      (server_handler.subsystem_name.decode('utf-8') if isinstance(server_handler.subsystem_name, bytes) else server_handler.subsystem_name) == 'sftp')
+            self.forward_channel(channel, backend_channel, recorder, db_session.id, is_sftp)
             
             # Close session in database
             db_session.ended_at = datetime.utcnow()
             db_session.is_active = False
             db_session.duration_seconds = int((db_session.ended_at - db_session.started_at).total_seconds())
             db_session.termination_reason = 'normal'
-            if hasattr(recorder, 'recording_file') and os.path.exists(recorder.recording_file):
+            if recorder and hasattr(recorder, 'recording_file') and os.path.exists(recorder.recording_file):
                 db_session.recording_size = os.path.getsize(recorder.recording_file)
             db.commit()
             logger.info(f"Session {session_id} ended normally (duration: {db_session.duration_seconds}s)")
@@ -1531,9 +1870,10 @@ class SSHProxyServer:
             write_utmp_logout(tty_name, user.username)
             logger.info(f"Session {session_id} removed from utmp")
             
-            # Save recording
-            recorder.record_event('session_end', 'Connection closed')
-            recorder.save()
+            # Save recording (only if we were recording)
+            if recorder:
+                recorder.record_event('session_end', 'Connection closed')
+                recorder.save()
         
         except Exception as e:
             logger.error(f"Error handling client {source_ip}: {e}", exc_info=True)

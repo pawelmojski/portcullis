@@ -142,48 +142,36 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label">Access Duration / End Time</label>
-                        <div class="btn-group w-100 mb-2" role="group">
-                            <input type="radio" class="btn-check" name="duration_type" id="duration_type_duration" value="duration" checked onchange="toggleDurationFields()">
-                            <label class="btn btn-outline-primary" for="duration_type_duration">
-                                <i class="bi bi-clock"></i> Duration
-                            </label>
-                            
-                            <input type="radio" class="btn-check" name="duration_type" id="duration_type_absolute" value="absolute" onchange="toggleDurationFields()">
-                            <label class="btn btn-outline-primary" for="duration_type_absolute">
-                                <i class="bi bi-calendar"></i> Specific Date/Time
-                            </label>
-                            
-                            <input type="radio" class="btn-check" name="duration_type" id="duration_type_permanent" value="permanent" onchange="toggleDurationFields()">
-                            <label class="btn btn-outline-primary" for="duration_type_permanent">
-                                <i class="bi bi-infinity"></i> Permanent
-                            </label>
+                        <label for="duration_type" class="form-label">Access Duration / End Time</label>
+                        <select class="form-select" id="duration_type" name="duration_type" onchange="toggleDurationFields()">
+                            <option value="duration" selected>Duration (relative time)</option>
+                            <option value="absolute">Specific Date/Time (absolute)</option>
+                        </select>
+                        
+                        <div id="durationField" class="mt-3">
+                            <label for="duration_text" class="form-label">Duration</label>
+                            <input type="text" class="form-control" id="duration_text" name="duration_text" 
+                                   placeholder="e.g., 2h, 30m, 1d, 1.5h, 2d12h, 1w, 1M, permanent" value="">
+                            <small class="form-text text-muted">
+                                Examples: <code>30m</code> (30 minutes), <code>2h</code> (2 hours), <code>1.5h</code> (90 minutes), 
+                                <code>1d</code> (1 day), <code>2d12h</code> (2 days 12 hours), <code>1w</code> (1 week), 
+                                <code>1M</code> or <code>1mo</code> (1 month), <code>1y</code> (1 year).
+                                <br>Use <code>0</code> or <code>permanent</code> for permanent access.
+                            </small>
                         </div>
                         
-                        <div id="durationField">
+                        <div id="absoluteField" class="mt-3" style="display: none;">
                             <div class="row">
                                 <div class="col-md-6">
-                                    <label for="duration_hours" class="form-label">Hours</label>
-                                    <input type="number" class="form-control" id="duration_hours" name="duration_hours" 
-                                           min="0" max="8760" value="0" placeholder="0">
+                                    <label for="absolute_start_time" class="form-label">Start Date/Time</label>
+                                    <input type="datetime-local" class="form-control" id="absolute_start_time" name="absolute_start_time">
+                                    <small class="form-text text-muted">Grant becomes active at this time (UTC)</small>
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="duration_minutes" class="form-label">Minutes</label>
-                                    <input type="number" class="form-control" id="duration_minutes" name="duration_minutes" 
-                                           min="0" max="59" value="0" placeholder="0">
+                                    <label for="end_time" class="form-label">End Date/Time</label>
+                                    <input type="datetime-local" class="form-control" id="end_time" name="end_time">
+                                    <small class="form-text text-muted">Grant expires at this time (UTC)</small>
                                 </div>
-                            </div>
-                            <small class="form-text text-muted">Grant will expire after specified duration from start time. Leave both at 0 for permanent access.</small>
-                        </div>
-                        
-                        <div id="absoluteField" style="display: none;">
-                            <input type="datetime-local" class="form-control" id="end_time" name="end_time">
-                            <small class="form-text text-muted">Grant will expire at specified date/time (UTC)</small>
-                        </div>
-                        
-                        <div id="permanentField" style="display: none;">
-                            <div class="alert alert-warning mb-0">
-                                <i class="bi bi-exclamation-triangle"></i> This grant will never expire automatically
                             </div>
                         </div>
                     </div>
@@ -246,14 +234,12 @@ function toggleScopeFields() {
 }
 
 function toggleDurationFields() {
-    const durationType = document.querySelector('input[name="duration_type"]:checked').value;
+    const durationType = document.getElementById('duration_type').value;
     const durationField = document.getElementById('durationField');
     const absoluteField = document.getElementById('absoluteField');
-    const permanentField = document.getElementById('permanentField');
     
     durationField.style.display = durationType === 'duration' ? 'block' : 'none';
     absoluteField.style.display = durationType === 'absolute' ? 'block' : 'none';
-    permanentField.style.display = durationType === 'permanent' ? 'block' : 'none';
 }
 
 function loadUserIPs() {

@@ -417,7 +417,7 @@ class SessionTransfer(Base):
     __table_args__ = (
         CheckConstraint(
             "transfer_type IN ('scp_upload', 'scp_download', 'sftp_upload', 'sftp_download', "
-            "'port_forward_local', 'port_forward_remote', 'socks_connection')",
+            "'port_forward_local', 'port_forward_remote', 'socks_connection', 'sftp_session')",
             name="check_transfer_type_valid"
         ),
     )
