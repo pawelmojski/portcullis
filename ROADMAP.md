@@ -75,6 +75,17 @@
 - Bash completion
 - Man pages
 
+### v2.1 - HTTP/HTTPS Proxy (Future) 💡
+
+**HTTP Proxy dla starych urządzeń sieciowych:**
+- Mini Squid-like proxy dla GUI-only devices (old switches, routers, appliances)
+- HTTP/HTTPS proxy z policy-based access control
+- HTTPS MITM (SSL intercept) dla pełnej kontroli dostępu
+- Per-user/per-device access policies
+- Session recording (HTTP request/response logs)
+- Use case: Stare switche/routery bez CLI, tylko web GUI
+- Perfect for: Legacy network infrastructure management
+
 ## Project Vision
 
 Stworzenie kompletnego SSH/RDP jump hosta z:
