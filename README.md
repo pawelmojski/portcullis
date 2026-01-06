@@ -14,25 +14,25 @@ Imagine you have 50 servers and 20 employees. Each employee needs access to diff
 
 **Portcullis sits in the middle** and solves this:
 
-\`\`\`
+```
 User's Computer → Portcullis Gateway → Backend Server
     (anywhere)        (one place)         (10.0.x.x)
-\`\`\`
+```
 
-From user's perspective: \`ssh server.company.com\` - works like normal SSH/RDP.
+From user's perspective: `ssh server.company.com` - works like normal SSH/RDP.
 Behind the scenes: Portcullis checks "does this user have permission RIGHT NOW?" and either allows or denies.
 
 ### Key Concept: Time-Limited Access Grants
 
 Instead of permanent accounts, you **grant temporary access**:
 
-\`\`\`bash
+```bash
 # Give Alice 8 hours access to production database
 portcullis grant alice --server prod-db-01 --duration 8h
 
 # Alice can now: ssh alice@prod-db-01
 # After 8 hours: Access automatically expires, no cleanup needed
-\`\`\`
+```
 
 Everything is:
 - ✅ **Centralized** - one place to manage all access
@@ -46,7 +46,7 @@ Everything is:
 
 ### 1. The Gateway (Portcullis)
 
-Portcullis runs on a single server (e.g., \`gateway.company.com\`):
+Portcullis runs on a single server (e.g., `gateway.company.com`):
 - **Port 22** - SSH traffic goes through here
 - **Port 3389** - RDP traffic goes through here
 - **Port 5000** - Web management interface
@@ -56,34 +56,34 @@ Portcullis runs on a single server (e.g., \`gateway.company.com\`):
 You manage access through **policies** (grants):
 
 **Example: Grant group access**
-\`\`\`
+```
 User: john
 Target: All servers in "Production Databases" group
 Protocol: SSH only
 Duration: 24 hours
 SSH logins: postgres, readonly
-\`\`\`
+```
 
 When John tries to connect:
-\`\`\`bash
+```bash
 john@laptop:~$ ssh postgres@prod-db-01.company.com
 # ↓ Connection goes to Portcullis
 # ↓ Portcullis checks: Does john have active grant for prod-db-01?
 # ✅ YES - proxy connection to real prod-db-01 server
 # ❌ NO - show friendly "access denied" message
-\`\`\`
+```
 
 ### 3. What User Sees
 
 **WITH ACCESS GRANT:**
-\`\`\`bash
+```bash
 $ ssh myuser@target-server
 # Works exactly like normal SSH
 # User doesn't even know Portcullis is there
-\`\`\`
+```
 
 **WITHOUT ACCESS GRANT:**
-\`\`\`
+```
 +====================================================================+
 |                          ACCESS DENIED                             |
 +====================================================================+
@@ -95,7 +95,7 @@ $ ssh myuser@target-server
   Reason: No matching access policy
 
   Please contact your administrator to request access.
-\`\`\`
+```
 
 ### 4. Session Recording
 
@@ -119,16 +119,16 @@ Web interface shows:
 **9:00 AM** - Database issue reported
 
 **Team Lead:**
-\`\`\`bash
+```bash
 # Grant DBA access for 4 hours
 portcullis grant alice --server prod-db-01 --duration 4h --protocol ssh
-\`\`\`
+```
 
 **Alice (from home, VPN, or office):**
-\`\`\`bash
+```bash
 alice@laptop:~$ ssh postgres@prod-db-01
 # Works immediately, no keys to copy, no server accounts to create
-\`\`\`
+```
 
 **1:00 PM** - Issue resolved, access expires automatically
 
@@ -141,7 +141,7 @@ alice@laptop:~$ ssh postgres@prod-db-01
 
 ## 🎨 Web Management Interface
 
-Access at \`http://gateway.company.com:5000\`
+Access at `http://gateway.company.com:5000`
 
 ### Dashboard
 - 🟢 Service status (SSH Proxy, RDP Proxy running)
@@ -158,11 +158,11 @@ Access at \`http://gateway.company.com:5000\`
    - Server group (e.g., "All production DBs")
    - Single server (e.g., "app-server-01")
    - Specific service (e.g., "db-01 SSH only")
-3. **How long?** Enter duration: \`2h\`, \`3d\`, \`1w\`, or \`permanent\`
+3. **How long?** Enter duration: `2h`, `3d`, `1w`, or `permanent`
 
 **Advanced options:**
 - Protocol filtering (SSH only, RDP only, or both)
-- SSH login restrictions (only \`postgres\` and \`readonly\` accounts)
+- SSH login restrictions (only `postgres` and `readonly` accounts)
 - Schedule windows (Monday-Friday 9-17)
 
 ### Search Everything (Mega-Wyszukiwarka) 🔍
@@ -174,12 +174,12 @@ Unified search across all data:
 - Export to CSV for reporting
 
 **Examples:**
-\`\`\`
+```
 Search: "alice"          → All sessions by user alice
 Search: "10.0.1.50"      → All connections to/from this IP
 Search: "#42"            → Policy #42 details
 Search: "denied"         → All denied connection attempts
-\`\`\`
+```
 
 ---
 
@@ -187,7 +187,7 @@ Search: "denied"         → All denied connection attempts
 
 ### Simple Deployment (Current)
 
-\`\`\`
+```
 ┌─────────────────────────────────────────┐
 │         Portcullis Gateway              │
 │  ┌─────────────┐  ┌──────────────────┐ │
@@ -206,11 +206,11 @@ Search: "denied"         → All denied connection attempts
     │  Backend     │  │  Backend     │
     │  Server 1    │  │  Server 2    │
     └──────────────┘  └──────────────┘
-\`\`\`
+```
 
 ### Distributed Architecture (v1.9 - Coming Soon)
 
-\`\`\`
+```
          ┌──────────────────────────┐
          │    Tower (Control)       │
          │  - Web UI                │
@@ -224,7 +224,7 @@ Search: "denied"         → All denied connection attempts
    │ Gate 1 │    │ Gate 2 │    │ Gate 3 │
    │  DMZ   │    │ Cloud  │    │ Office │
    └────────┘    └────────┘    └────────┘
-\`\`\`
+```
 
 **Use case:** Install Portcullis gate in different network segments (DMZ, cloud, office) - all managed from single Tower.
 
@@ -259,7 +259,7 @@ Search: "denied"         → All denied connection attempts
 ### User Experience
 - ✅ **Transparent** - Works with standard SSH/RDP clients
 - ✅ **Friendly errors** - Clear messages when access denied
-- ✅ **No config** - Users just \`ssh server\`, no special setup
+- ✅ **No config** - Users just `ssh server`, no special setup
 - ✅ **Agent forwarding** - SSH keys work naturally
 
 ---
@@ -268,7 +268,7 @@ Search: "denied"         → All denied connection attempts
 
 ### Installation
 
-\`\`\`bash
+```bash
 # Install system dependencies
 sudo apt install postgresql python3.13 python3-pip python3-venv
 
@@ -289,7 +289,7 @@ alembic upgrade head
 sudo systemctl enable --now portcullis-ssh-proxy
 sudo systemctl enable --now portcullis-rdp-proxy
 sudo systemctl enable --now portcullis-flask
-\`\`\`
+```
 
 ### First Use
 
@@ -300,14 +300,14 @@ sudo systemctl enable --now portcullis-flask
    - Add your source IP (see "My IP: X.X.X.X" in top right)
 3. **Add a backend server:**
    - Servers → Add Server
-   - Name: \`test-server\`, IP: \`10.0.1.100\`
+   - Name: `test-server`, IP: `10.0.1.100`
 4. **Grant yourself access:**
    - Policies → Grant Access
-   - Select yourself, select server, duration \`1h\`
+   - Select yourself, select server, duration `1h`
 5. **Test connection:**
-   \`\`\`bash
+   ```bash
    ssh your-username@test-server
-   \`\`\`
+   ```
 
 ---
 
@@ -318,7 +318,7 @@ sudo systemctl enable --now portcullis-flask
 **Problem:** Need to give contractor temporary access to specific servers.
 
 **Solution:**
-\`\`\`bash
+```bash
 # Add contractor
 portcullis user add contractor-john --email john@external.com
 portcullis user add-ip contractor-john 203.0.113.50 --label "Contractor VPN"
@@ -327,34 +327,34 @@ portcullis user add-ip contractor-john 203.0.113.50 --label "Contractor VPN"
 portcullis grant contractor-john --group "Development Servers" --duration 14d
 
 # Access automatically expires, no cleanup needed
-\`\`\`
+```
 
 ### 2. On-Call Rotation
 
 **Problem:** Different person has production access each week.
 
 **Solution:**
-\`\`\`bash
+```bash
 # Week 1: Alice on-call
 portcullis grant alice --group "Production" --duration 7d
 
 # Week 2: Bob on-call (Alice's grant already expired)
 portcullis grant bob --group "Production" --duration 7d
-\`\`\`
+```
 
 ### 3. Emergency Access
 
 **Problem:** Database down at 2 AM, need DBA access NOW.
 
 **Solution:**
-\`\`\`bash
+```bash
 # From phone via curl:
 curl -X POST https://gateway/api/v1/grant \\
   -H "Authorization: Bearer \$TOKEN" \\
   -d '{"user":"dba-alice","server":"prod-db","duration":"4h"}'
 
 # DBA can connect immediately from anywhere
-\`\`\`
+```
 
 ### 4. Compliance Audit
 
@@ -385,10 +385,10 @@ A policy is: "User X can access Target Y via Protocol Z for Duration D"
 ### User Source IPs
 
 Users can have multiple source IPs:
-- Home: \`192.168.1.100\`
-- Office: \`10.0.50.25\`
-- VPN: \`100.64.0.10\`
-- Mobile: \`203.0.113.5\`
+- Home: `192.168.1.100`
+- Office: `10.0.50.25`
+- VPN: `100.64.0.10`
+- Mobile: `203.0.113.5`
 
 When user connects from ANY of these IPs, Portcullis recognizes them.
 
@@ -449,7 +449,7 @@ Portcullis logs:
 
 Control who can do SSH port forwarding:
 
-\`\`\`bash
+```bash
 # Grant with port forwarding allowed
 portcullis grant alice --server bastion \\
   --allow-port-forwarding local,remote,dynamic
@@ -457,17 +457,17 @@ portcullis grant alice --server bastion \\
 # Grant without port forwarding
 portcullis grant bob --server app-server \\
   --no-port-forwarding
-\`\`\`
+```
 
 ### Schedule-Based Access
 
 Access only during business hours:
 
-\`\`\`bash
+```bash
 portcullis grant alice --server prod-db \\
   --schedule "Mon-Fri 09:00-17:00" \\
   --timezone "Europe/Warsaw"
-\`\`\`
+```
 
 Recurring weekly - user can connect anytime within schedule, automatically blocked outside.
 
@@ -475,7 +475,7 @@ Recurring weekly - user can connect anytime within schedule, automatically block
 
 Transparent proxy for routers (Tailscale, VPN gateways):
 
-\`\`\`bash
+```bash
 # User thinks they're connecting directly
 ssh user@10.50.1.100
 
@@ -484,7 +484,7 @@ iptables -t mangle -A PREROUTING -p tcp --dport 22 \\
   -j TPROXY --on-port 2222
 
 # Portcullis sees original destination IP, checks policy
-\`\`\`
+```
 
 ---
 
@@ -509,14 +509,14 @@ iptables -t mangle -A PREROUTING -p tcp --dport 22 \\
 
 ### Health Check
 
-\`\`\`bash
+```bash
 # Check all services
 systemctl status portcullis-*
 
 # View logs
 journalctl -u portcullis-ssh-proxy -f
 tail -f /var/log/portcullis/ssh_proxy.log
-\`\`\`
+```
 
 ### Metrics
 
@@ -529,7 +529,7 @@ Web dashboard shows:
 
 ### Maintenance
 
-\`\`\`bash
+```bash
 # Backup database
 pg_dump portcullis > backup.sql
 
@@ -539,7 +539,7 @@ ls /var/recordings/portcullis/rdp/
 
 # Clean old recordings (>90 days)
 find /var/recordings/ -mtime +90 -delete
-\`\`\`
+```
 
 ---
 
@@ -570,14 +570,14 @@ MIT License - See LICENSE file for details.
 - Works with normal SSH/RDP clients
 
 **One command to grant access:**
-\`\`\`bash
+```bash
 portcullis grant alice --server prod-db --duration 8h
-\`\`\`
+```
 
 **One place to see everything:**
-\`\`\`
+```
 http://gateway:5000
-\`\`\`
+```
 
 That's it. Simple concept, powerful execution. 🏰
 
