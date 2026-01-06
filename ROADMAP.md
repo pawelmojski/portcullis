@@ -36,6 +36,45 @@
 - v1.0: Access Control V2 with Flexible Policies (December 2025)
 - v0.9: Real-time Session Tracking with UTMP/WTMP (December 2025)
 
+## 🚀 Planned Features
+
+### v1.9 - Distributed Architecture & TPROXY (Q1 2026)
+
+**GUI Improvements:**
+- Dashboard tuning (better metrics, cleaner layout)
+- Refactor host/group/user pages (better UX, consistent navigation)
+- Search enhancements (save queries, more filters)
+
+**Distributed Jumphost Service:**
+- API layer separation (REST API for auth/policy/sessions)
+- Multi-jumphost support (single control plane, multiple data planes)
+- Jumphost registration & heartbeat system
+- Per-jumphost IP pools
+- Policy scoping (all/specific jumphost)
+- Local cache with TTL (offline mode support)
+- Session events batching & async upload
+- Recording upload after session end
+
+**TPROXY Support:**
+- Transparent proxy mode for Linux routers
+- SO_ORIGINAL_DST extraction (preserve dst_ip:dst_port)
+- Server lookup by IP (no hostname needed)
+- Dual mode support (NAT + TPROXY simultaneously)
+- Perfect for Tailscale exit nodes & VPN concentrators
+- Zero-config for end users (ssh target-server just works)
+
+### v2.0 - CLI & Management Tools (Q1 2026) 🎯
+
+**curl-based CLI:**
+- `jumphost grant create --user p.mojski --server prod-01 --duration 2h`
+- `jumphost sessions list --active --protocol ssh`
+- `jumphost policy list --expired`
+- `jumphost server add --name srv-01 --ip 10.0.1.50`
+- Token-based authentication
+- JSON output support
+- Bash completion
+- Man pages
+
 ## Project Vision
 
 Stworzenie kompletnego SSH/RDP jump hosta z:
@@ -44,6 +83,9 @@ Stworzenie kompletnego SSH/RDP jump hosta z:
 - ✅ Mapowaniem użytkowników per source IP (DONE - multiple IPs supported)
 - ✅ Nagrywaniem sesji (DONE - SSH JSONL, RDP .pyrdp)
 - ✅ Live view sesji (DONE - 2s polling for SSH)
+- ⏳ Distributed architecture (v1.9 - IN PROGRESS)
+- ⏳ TPROXY transparent proxy (v1.9 - IN PROGRESS)
+- ⏳ CLI management tools (v2.0 - PLANNED)
 - ⏳ Dynamicznym zarządzaniem pulą IP (PARTIAL - manual allocation)
 - ⏳ Integracją z FreeIPA (TODO)
 
