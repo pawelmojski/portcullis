@@ -1,5 +1,6 @@
 """Database configuration and models."""
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, CheckConstraint, or_, BigInteger
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text, CheckConstraint, or_, BigInteger, Time
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -261,6 +262,9 @@ class AccessPolicy(Base):
     start_time = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     end_time = Column(DateTime, nullable=True, index=True)  # NULL = permanent access
     
+    # Schedule-based access (recurring time windows)
+    use_schedules = Column(Boolean, default=False, nullable=False)  # If True, check policy_schedules
+    
     is_active = Column(Boolean, default=True, index=True)
     granted_by = Column(String(255))
     reason = Column(Text)
@@ -273,6 +277,7 @@ class AccessPolicy(Base):
     target_group = relationship("ServerGroup", back_populates="access_policies")
     target_server = relationship("Server", back_populates="access_policies")
     ssh_logins = relationship("PolicySSHLogin", back_populates="policy", cascade="all, delete-orphan")
+    schedules = relationship("PolicySchedule", back_populates="policy", cascade="all, delete-orphan")
     
     __table_args__ = (
         CheckConstraint(
@@ -309,6 +314,37 @@ class PolicySSHLogin(Base):
     __table_args__ = (
         CheckConstraint("policy_id IS NOT NULL", name="check_ssh_login_policy_id"),
     )
+
+
+class PolicySchedule(Base):
+    """Time-based schedule rules for access policies (recurring windows)."""
+    __tablename__ = "policy_schedules"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    policy_id = Column(Integer, ForeignKey("access_policies.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100))  # Human-readable name (e.g., "Business hours", "Weekend backup window")
+    
+    # Weekday filter: 0=Monday, 6=Sunday. NULL = all days
+    weekdays = Column(postgresql.ARRAY(Integer))
+    
+    # Time range (NULL = all day)
+    time_start = Column(Time)  # e.g., "08:00"
+    time_end = Column(Time)    # e.g., "16:00"
+    
+    # Month filter: 1-12. NULL = all months
+    months = Column(postgresql.ARRAY(Integer))
+    
+    # Day of month filter: 1-31. NULL = all days
+    days_of_month = Column(postgresql.ARRAY(Integer))
+    
+    # Timezone for time comparison (default: Europe/Warsaw)
+    timezone = Column(String(50), default='Europe/Warsaw', nullable=False)
+    
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    policy = relationship("AccessPolicy", back_populates="schedules")
 
 
 class Session(Base):

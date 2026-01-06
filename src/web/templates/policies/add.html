@@ -178,6 +178,169 @@
                     
                     <hr class="my-4">
                     
+                    <h5 class="mb-3">6. Recurring Schedule (Optional)</h5>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" class="form-check-input" id="use_schedules" 
+                                   name="use_schedules" onchange="toggleScheduleFields()">
+                            <label class="form-check-label" for="use_schedules">
+                                <i class="bi bi-calendar-week"></i> Enable Recurring Time Windows
+                            </label>
+                            <small class="form-text text-muted d-block">
+                                Restrict access to specific days of week, time ranges, months, or days of month.
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <div id="scheduleFields" style="display: none;">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i> 
+                            <strong>Multiple schedules work with OR logic:</strong> If any schedule matches current time, access is granted.
+                            Use multiple schedules for complex patterns like "Mon-Fri 8-16 OR Sat 2-6".
+                        </div>
+                        
+                        <div id="scheduleList"></div>
+                        
+                        <div class="card bg-light mt-3">
+                            <div class="card-body">
+                                <h6>Add New Schedule Rule</h6>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Schedule Name</label>
+                                    <input type="text" class="form-control" id="schedule_name" 
+                                           placeholder="e.g., Business Hours, Weekend Maintenance">
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Days of Week (leave all unchecked for all days)</label>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input weekday-check" value="0" id="wd_mon">
+                                            <label class="form-check-label" for="wd_mon">Mon</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input weekday-check" value="1" id="wd_tue">
+                                            <label class="form-check-label" for="wd_tue">Tue</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input weekday-check" value="2" id="wd_wed">
+                                            <label class="form-check-label" for="wd_wed">Wed</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input weekday-check" value="3" id="wd_thu">
+                                            <label class="form-check-label" for="wd_thu">Thu</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input weekday-check" value="4" id="wd_fri">
+                                            <label class="form-check-label" for="wd_fri">Fri</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input weekday-check" value="5" id="wd_sat">
+                                            <label class="form-check-label" for="wd_sat">Sat</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input weekday-check" value="6" id="wd_sun">
+                                            <label class="form-check-label" for="wd_sun">Sun</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Time Start (24h)</label>
+                                        <input type="time" class="form-control" id="time_start" value="00:00">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Time End (24h)</label>
+                                        <input type="time" class="form-control" id="time_end" value="23:59">
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Months (leave all unchecked for all months)</label>
+                                    <div class="d-flex gap-2 flex-wrap">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="1" id="m_jan">
+                                            <label class="form-check-label" for="m_jan">Jan</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="2" id="m_feb">
+                                            <label class="form-check-label" for="m_feb">Feb</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="3" id="m_mar">
+                                            <label class="form-check-label" for="m_mar">Mar</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="4" id="m_apr">
+                                            <label class="form-check-label" for="m_apr">Apr</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="5" id="m_may">
+                                            <label class="form-check-label" for="m_may">May</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="6" id="m_jun">
+                                            <label class="form-check-label" for="m_jun">Jun</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="7" id="m_jul">
+                                            <label class="form-check-label" for="m_jul">Jul</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="8" id="m_aug">
+                                            <label class="form-check-label" for="m_aug">Aug</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="9" id="m_sep">
+                                            <label class="form-check-label" for="m_sep">Sep</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="10" id="m_oct">
+                                            <label class="form-check-label" for="m_oct">Oct</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="11" id="m_nov">
+                                            <label class="form-check-label" for="m_nov">Nov</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input month-check" value="12" id="m_dec">
+                                            <label class="form-check-label" for="m_dec">Dec</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Days of Month (optional)</label>
+                                    <input type="text" class="form-control" id="days_of_month" 
+                                           placeholder="e.g., 1,15 or 1-7 or 1,10,20">
+                                    <small class="form-text text-muted">
+                                        Comma-separated days (1-31). Leave empty for all days.
+                                    </small>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label class="form-label">Timezone</label>
+                                    <select class="form-select" id="timezone">
+                                        <option value="Europe/Warsaw" selected>Europe/Warsaw (CET/CEST)</option>
+                                        <option value="UTC">UTC</option>
+                                        <option value="Europe/London">Europe/London</option>
+                                        <option value="America/New_York">America/New_York (EST/EDT)</option>
+                                        <option value="America/Los_Angeles">America/Los_Angeles (PST/PDT)</option>
+                                        <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                                    </select>
+                                </div>
+                                
+                                <button type="button" class="btn btn-success" onclick="addSchedule()">
+                                    <i class="bi bi-plus-circle"></i> Add Schedule
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-4">
+                    
                     <div class="d-flex justify-content-end gap-2">
                         <a href="{{ url_for('policies.index') }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-primary">
@@ -270,6 +433,170 @@ document.addEventListener('DOMContentLoaded', function() {
     const userSelect = document.getElementById('user_id');
     if (userSelect && userSelect.value) {
         loadUserIPs();
+    }
+});
+
+// Schedule management
+let schedules = [];
+
+function toggleScheduleFields() {
+    const useSchedules = document.getElementById('use_schedules').checked;
+    document.getElementById('scheduleFields').style.display = useSchedules ? 'block' : 'none';
+}
+
+function parseCommaSeparatedInts(str) {
+    if (!str || !str.trim()) return null;
+    const parts = str.split(',').map(s => s.trim()).filter(s => s);
+    const result = [];
+    for (const part of parts) {
+        if (part.includes('-')) {
+            const [start, end] = part.split('-').map(n => parseInt(n.trim()));
+            for (let i = start; i <= end; i++) {
+                if (!result.includes(i)) result.push(i);
+            }
+        } else {
+            const num = parseInt(part);
+            if (!result.includes(num)) result.push(num);
+        }
+    }
+    return result.length > 0 ? result : null;
+}
+
+function addSchedule() {
+    const name = document.getElementById('schedule_name').value.trim() || 'Unnamed Schedule';
+    
+    // Weekdays
+    const weekdayChecks = document.querySelectorAll('.weekday-check:checked');
+    const weekdays = weekdayChecks.length > 0 ? Array.from(weekdayChecks).map(c => parseInt(c.value)) : null;
+    
+    // Time
+    const timeStart = document.getElementById('time_start').value || '00:00';
+    const timeEnd = document.getElementById('time_end').value || '23:59';
+    
+    // Months
+    const monthChecks = document.querySelectorAll('.month-check:checked');
+    const months = monthChecks.length > 0 ? Array.from(monthChecks).map(c => parseInt(c.value)) : null;
+    
+    // Days of month
+    const daysOfMonth = parseCommaSeparatedInts(document.getElementById('days_of_month').value);
+    
+    const timezone = document.getElementById('timezone').value;
+    
+    const schedule = {
+        name: name,
+        weekdays: weekdays,
+        time_start: timeStart,
+        time_end: timeEnd,
+        months: months,
+        days_of_month: daysOfMonth,
+        timezone: timezone
+    };
+    
+    schedules.push(schedule);
+    renderSchedules();
+    clearScheduleForm();
+}
+
+function removeSchedule(index) {
+    schedules.splice(index, 1);
+    renderSchedules();
+}
+
+function clearScheduleForm() {
+    document.getElementById('schedule_name').value = '';
+    document.querySelectorAll('.weekday-check').forEach(c => c.checked = false);
+    document.getElementById('time_start').value = '00:00';
+    document.getElementById('time_end').value = '23:59';
+    document.querySelectorAll('.month-check').forEach(c => c.checked = false);
+    document.getElementById('days_of_month').value = '';
+    document.getElementById('timezone').value = 'Europe/Warsaw';
+}
+
+function formatScheduleDescription(schedule) {
+    const weekdayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    let parts = [];
+    
+    // Weekdays
+    if (schedule.weekdays && schedule.weekdays.length > 0) {
+        if (schedule.weekdays.length === 5 && 
+            [0,1,2,3,4].every(d => schedule.weekdays.includes(d))) {
+            parts.push('Mon-Fri');
+        } else if (schedule.weekdays.length === 2 && 
+                   schedule.weekdays.includes(5) && schedule.weekdays.includes(6)) {
+            parts.push('Weekends only');
+        } else {
+            const days = schedule.weekdays.map(d => weekdayNames[d]).join('/');
+            parts.push(days);
+        }
+    }
+    
+    // Time
+    if (schedule.time_start !== '00:00' || schedule.time_end !== '23:59') {
+        parts.push(`${schedule.time_start}-${schedule.time_end}`);
+    }
+    
+    // Months
+    if (schedule.months && schedule.months.length > 0) {
+        const months = schedule.months.map(m => monthNames[m-1]).join('/');
+        parts.push(months + ' only');
+    }
+    
+    // Days of month
+    if (schedule.days_of_month && schedule.days_of_month.length > 0) {
+        if (schedule.days_of_month.length === 1 && schedule.days_of_month[0] === 1) {
+            parts.push('First day of month');
+        } else {
+            parts.push('Days: ' + schedule.days_of_month.join(','));
+        }
+    }
+    
+    // Timezone
+    if (schedule.timezone !== 'Europe/Warsaw') {
+        parts.push(`(${schedule.timezone})`);
+    }
+    
+    return parts.length > 0 ? parts.join(' ') : 'All times';
+}
+
+function renderSchedules() {
+    const container = document.getElementById('scheduleList');
+    if (schedules.length === 0) {
+        container.innerHTML = '<p class="text-muted">No schedules added yet.</p>';
+        return;
+    }
+    
+    let html = '';
+    schedules.forEach((schedule, index) => {
+        const description = formatScheduleDescription(schedule);
+        html += `
+            <div class="card mb-2">
+                <div class="card-body py-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${schedule.name}</strong>
+                        <br>
+                        <small class="text-muted">${description}</small>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="removeSchedule(${index})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    container.innerHTML = html;
+}
+
+// Submit handler to include schedules as JSON
+document.getElementById('policyForm').addEventListener('submit', function(e) {
+    if (document.getElementById('use_schedules').checked && schedules.length > 0) {
+        // Add schedules as JSON to form data
+        const schedulesInput = document.createElement('input');
+        schedulesInput.type = 'hidden';
+        schedulesInput.name = 'schedules_json';
+        schedulesInput.value = JSON.stringify(schedules);
+        this.appendChild(schedulesInput);
     }
 });
 </script>

@@ -1,6 +1,6 @@
 # Jump Host Project - Roadmap & TODO
 
-## Current Status: v1.5 (Grant Expiry Auto-Disconnect) - January 2026 ✅
+## Current Status: v1.6 (Schedule-Based Access Control) - January 2026 ✅
 
 **Operational Services:**
 - ✅ SSH Proxy: `0.0.0.0:22` (systemd: jumphost-ssh-proxy.service)
@@ -15,9 +15,11 @@
 - ✅ Port Forwarding Control: Per-policy SSH forwarding permissions 🎯
 - ✅ SSH Port Forwarding: -L (local), -R (remote), -D (SOCKS) 🎯
 - ✅ Policy Management: Renew/Reactivate with group filtering 🎯
-- ✅ Grant Expiry Auto-Disconnect: Warnings & auto-termination 🎯 NEW v1.5
+- ✅ Grant Expiry Auto-Disconnect: Warnings & auto-termination 🎯
+- ✅ **Schedule-Based Access Control**: Recurring time windows with timezone support 🎯 NEW v1.6
 
 **Recent Milestones:**
+- v1.6: Schedule-Based Access Control (January 2026) ✅ COMPLETED
 - v1.5: Grant Expiry Auto-Disconnect with Warnings (January 2026) ✅ COMPLETED
 - v1.4: SSH Port Forwarding & Policy Enhancements (January 2026) ✅ COMPLETED
 - v1.3: RDP MP4 Conversion System (January 2026) ✅ COMPLETED
@@ -95,7 +97,7 @@ Live view available in web GUI
 - **Auto-Restart**: All services configured with `Restart=always`
 
 #### 4. Architecture Simplification
-- **RDP**: Direct PyRDP MITM on 0.0.0.0:3389 (removed rdp_guard.py, rdp_wrapper.sh)
+- **RDP**: Direct PyRDP MITM on 0.0.0.0:3389 (systemd service: rdp-proxy)
 - **Logs**: Unified structure in /var/log/jumphost/
 - **Service Management**: Full systemd integration with enable/disable/restart
 
@@ -116,9 +118,9 @@ Live view available in web GUI
 - `/etc/logrotate.d/jumphost` - Log rotation configuration
 
 ### 🗑️ Deprecated/Removed
-- `src/proxy/rdp_guard.py` - No longer used (direct PyRDP MITM now)
-- `src/proxy/rdp_wrapper.sh` - No longer used
-- `src/proxy/rdp_proxy.py` - Deprecated Python wrapper
+- `src/proxy/rdp_guard.py` - **REMOVED** (direct PyRDP MITM via systemd)
+- `src/proxy/rdp_proxy.py` - **REMOVED** (direct PyRDP MITM via systemd)
+- `src/proxy/rdp_wrapper.sh` - Still used for systemd startup
 
 ### 📊 Testing Results
 - **Dashboard Refresh**: ✅ 5-second auto-update working
@@ -267,6 +269,238 @@ permanent → 0 (no expiry)
 **New Modules**: 1 (`duration_parser.py`)
 **User Experience**: Dramatically improved (no password prompts, flexible durations, scheduled grants)
 **Code Quality**: Cleaner, more maintainable (single duration field, early rejection pattern)
+
+---
+
+## ✅ COMPLETED: v1.6 - Schedule-Based Access Control (January 2026)
+
+### 🎯 Goal: Recurring Time-Based Access Control
+
+**Challenge Solved**: Policies could only have absolute start/end times. Needed support for recurring patterns like "business hours Mon-Fri 8-16" or "first Monday of month 04:00-08:00".
+
+### ✅ Delivered Features
+
+#### 1. Database Schema - policy_schedules Table
+- **Table**: `policy_schedules` with CASCADE delete on parent policy
+- **Columns**:
+  - `weekdays` (INTEGER[]) - 0=Monday, 6=Sunday, NULL=all days
+  - `time_start`, `time_end` (TIME) - Daily time window, NULL=00:00/23:59
+  - `months` (INTEGER[]) - 1-12, NULL=all months
+  - `days_of_month` (INTEGER[]) - 1-31, NULL=all days
+  - `timezone` (VARCHAR 50) - pytz timezone string (default 'Europe/Warsaw')
+  - `is_active` (BOOLEAN) - Enable/disable rule
+- **Relationship**: `access_policies.use_schedules` (BOOLEAN) flag enables feature
+- **Migration**: Manual SQL execution after killing 4 blocking sessions
+
+#### 2. Schedule Checker Module (src/core/schedule_checker.py)
+- **matches_schedule(schedule_rule, check_time)** → bool
+  - Converts UTC to policy timezone using pytz
+  - Checks weekday (0-6), time range, month (1-12), day of month (1-31)
+  - Supports midnight-crossing ranges (e.g., 22:00-02:00 overnight shifts)
+  - Returns True if all conditions match
+- **check_policy_schedules(schedules, check_time)** → (bool, str)
+  - OR logic: If ANY schedule matches, return (True, schedule_name)
+  - No schedules: (True, None) - disabled
+  - None match: (False, None)
+- **format_schedule_description(schedule)** → str
+  - Human-readable: "Mon-Fri 08:00-16:00", "Weekends only", "First day of month"
+- **get_schedule_window_end(schedule_rule, check_time)** → datetime
+  - Returns when current window closes (e.g., today at 16:00 UTC)
+  - Returns None if not in valid window
+- **get_earliest_schedule_end(schedules, check_time)** → datetime
+  - Returns earliest end among all active schedules
+  - Used for effective_end_time calculation
+
+#### 3. Access Control Integration (Step 3.5)
+- **Location**: `src/core/access_control_v2.py` in `check_access_v2()`
+- **Step 3.5**: Schedule filtering after basic policy matching
+  - For each matching policy: `check_schedule_access(db, policy, check_time)`
+  - Queries PolicySchedule table, converts to dict format
+  - Calls `check_policy_schedules()` from schedule_checker module
+  - Filters out policies where schedule doesn't match
+  - Returns "Outside allowed time windows" if all filtered out
+- **Timing**: Executes AFTER basic policy matching, BEFORE SSH login check
+- **Testing Parameter**: Added `check_time` parameter to check_access_v2() for unit testing
+
+#### 4. Smart Effective End Time Calculation
+- **Problem**: User has policy valid until Jan 31, schedule ends at 16:00 today
+- **Old Behavior**: Warning "access expires in 25 days" (misleading)
+- **New Behavior**: Warning "access expires in 5 minutes" (schedule closing)
+- **Implementation**:
+  ```python
+  effective_end_time = min(policy.end_time, schedule_window_end)
+  ```
+- **Integration**: 
+  - SSH proxy stores `access_result` in server_handler
+  - Uses `effective_end_time` for grant expiry monitoring
+  - Fallback to `policy.end_time` if no schedule
+- **Result Dict**: `check_access_v2()` returns `effective_end_time` field
+
+#### 5. Web GUI - Schedule Builder
+- **Location**: `src/web/templates/policies/add.html` Section 6
+- **Components**:
+  - Checkbox to enable `use_schedules`
+  - Weekday checkboxes (Mon-Sun)
+  - Time range pickers (HH:MM 24h format)
+  - Month checkboxes (Jan-Dec)
+  - Days of month input (comma-separated: "1,15" or ranges: "1-7")
+  - Timezone selector (Europe/Warsaw, UTC, US/Eastern, etc.)
+  - "Add Schedule" button (multiple schedules per policy)
+- **JavaScript Functions**:
+  - `addSchedule()` - Collects form data, pushes to array
+  - `removeSchedule(index)` - Deletes schedule from array
+  - `formatScheduleDescription()` - "Mon-Fri 08:00-16:00" format
+  - `parseCommaSeparatedInts()` - Handles "1,15" or "1-7" ranges
+  - Form submit: Adds `schedules_json` hidden field
+
+#### 6. Backend Policy Creation
+- **Location**: `src/web/blueprints/policies.py`
+- **Logic** (lines 152-188):
+  ```python
+  use_schedules = request.form.get('use_schedules') == 'on'
+  if use_schedules:
+      policy.use_schedules = True
+      schedules_json = request.form.get('schedules_json')
+      schedules = json.loads(schedules_json)
+      for schedule_data in schedules:
+          schedule = PolicySchedule(
+              policy_id=policy.id,
+              weekdays=schedule_data.get('weekdays'),
+              time_start=datetime.strptime(schedule_data['time_start'], '%H:%M').time(),
+              time_end=datetime.strptime(schedule_data['time_end'], '%H:%M').time(),
+              # ... months, days_of_month, timezone
+          )
+          db.add(schedule)
+  ```
+
+### 📊 Use Cases Supported
+
+**Business Hours**:
+```
+Policy: start=Jan 1, end=Jan 31, use_schedules=True
+Schedule: Mon-Fri 08:00-16:00 Europe/Warsaw
+
+Result: Access granted only during work hours on weekdays
+Warning: "Access expires in 5 minutes" at 15:55 (schedule closing)
+Tomorrow: Can reconnect at 08:00 (new window opens)
+```
+
+**Weekend Maintenance**:
+```
+Schedule: Sat-Sun 00:00-23:59
+Result: Access only on weekends, denied Mon-Fri
+```
+
+**Monthly Backups**:
+```
+Schedule: days_of_month=[1], time=04:00-08:00
+Result: Access only on first day of month, 4-8 AM
+```
+
+**Seasonal Access**:
+```
+Schedule: months=[5,6,7,8], weekdays=[0,1,2,3,4]
+Result: Access May-August, only on weekdays
+```
+
+**Overnight Shifts**:
+```
+Schedule: time_start=22:00, time_end=02:00
+Result: 22:00-02:00 window (crosses midnight correctly)
+```
+
+### 📁 Files Modified
+
+**Backend**:
+- `src/core/schedule_checker.py` (265 lines, NEW)
+- `src/core/access_control_v2.py` - Added Step 3.5, effective_end_time calculation
+- `src/core/database.py` - PolicySchedule model, cascade delete fix
+- `src/proxy/ssh_proxy.py` - Store access_result, use effective_end_time
+
+**Frontend**:
+- `src/web/templates/policies/add.html` - Section 6: Schedule builder UI
+- `src/web/blueprints/policies.py` - Parse schedules_json, create PolicySchedule records
+
+**Database**:
+- `alembic/versions/8f3c9a2e1d5b_add_policy_schedules.py` - Migration (executed via SQL)
+- Manual SQL: CREATE TABLE, indexes, permissions, ALTER TABLE
+
+**Integration**:
+- RDP proxy: Uses check_access_v2() via modified PyRDP MITM
+- SSH proxy: Uses check_access_v2() with ssh_login parameter
+- Both proxies: Schedule-aware access control operational
+
+### 🧪 Testing Results
+
+**Test Scenario**: Mon-Fri 8-16 business hours
+- ✅ Monday 10:00: ALLOWED (in window)
+- ✅ Monday 18:00: DENIED (outside 8-16)
+- ✅ Saturday 10:00: DENIED (weekend)
+- ✅ Effective end time: Returns 16:00 today, not policy end (Jan 31)
+
+**Test Scenario**: Policy ends before schedule
+- ✅ Policy ends at 14:00, schedule at 16:00
+- ✅ Effective end time: 14:00 (policy ends first)
+- ✅ Warning: "Access expires in 4 hours" (policy), not "6 hours" (schedule)
+
+**Backward Compatibility**:
+- ✅ Policies with `use_schedules=False`: Work unchanged
+- ✅ Existing policies: No schedules = disabled, normal behavior
+- ✅ Legacy access control: Unaffected by schedule system
+
+**Policy Priority**:
+- ✅ OR logic: If ANY policy allows access, it's granted
+- ✅ Multiple schedules: If ANY schedule matches, policy active
+- ✅ Schedule disabled: Policy operates with start_time/end_time only
+
+### 🐛 Issues Fixed
+
+1. **Database Migration Blocked**: 4 active sessions killed via `pg_terminate_backend()`
+2. **Cascade Delete Error**: Fixed relationship from `backref` to `back_populates` with `cascade="all, delete-orphan"`
+3. **Timezone Complexity**: Implemented pytz conversion in matches_schedule()
+4. **Midnight Crossing**: Overnight ranges like 22:00-02:00 work correctly
+5. **Misleading Warnings**: Smart effective_end_time calculation provides accurate expiry time
+
+### 📝 Technical Notes
+
+**Architecture Decisions**:
+- **Recurring Rules**: Cron-like but more flexible (month/day combinations)
+- **OR Logic**: Multiple schedules with ANY matching = allow
+- **Timezone Storage**: Per-schedule timezone string, pytz for conversion
+- **Lazy Evaluation**: use_schedules flag enables/disables feature per policy
+- **Hierarchical Time**: start_time/end_time = outer envelope, schedules = inner windows
+- **Smart Expiry**: min(policy end, schedule end) for accurate warnings
+
+**Performance Considerations**:
+- Query optimization: PolicySchedule filtered by policy_id and is_active
+- Timezone conversion: Cached pytz timezone objects
+- Schedule evaluation: Early return on first match (OR logic)
+- No caching: Real-time evaluation ensures accuracy
+
+**Policy Hierarchy Clarification**:
+```
+policy.start_time ─────────────────────────────────────────────────── policy.end_time
+                    ▲                                   ▲
+                    │                                   │
+                schedule window 1: Mon-Fri 8-16        │
+                    │                                   │
+                schedule window 2: Sat 10-12           │
+                                                        │
+                                             effective_end_time
+```
+
+### 🎯 Success Criteria - ALL MET ✅
+
+- ✅ Support recurring time patterns (weekdays, hours, months, days)
+- ✅ Multiple schedules per policy with OR logic
+- ✅ Timezone-aware scheduling with pytz
+- ✅ Midnight-crossing time ranges (overnight shifts)
+- ✅ Web GUI for schedule creation
+- ✅ Integration with SSH and RDP proxies
+- ✅ Smart effective_end_time for accurate warnings
+- ✅ Backward compatibility (use_schedules flag)
+- ✅ Cascade delete when policy removed
+- ✅ Testing validation (all scenarios passed)
 
 ---
 
@@ -1526,9 +1760,8 @@ jumphost_cli.py list-allocations
 - [ ] Release unused proxy IPs
 
 ### Task 16: Systemd Services
-- [ ] ssh_proxy.service
-- [ ] rdp_guard.service
-- [ ] rdp_wrapper.service
+- [x] ssh_proxy.service (jumphost-ssh-proxy)
+- [x] rdp-proxy.service (direct pyrdp-mitm)
 - [ ] grant_expiration.service
 
 ### Task 17: Monitoring & Alerting

@@ -245,6 +245,7 @@ class SSHProxyHandler(paramiko.ServerInterface):
         self.target_server = result['server']
         self.authenticated_user = result['user']
         self.matching_policies = result.get('policies', [])
+        self.access_result = result  # Store full result for effective_end_time
         self.ssh_login = username  # SSH login for backend (e.g., "ideo")
         self.client_password = password
         
@@ -293,6 +294,7 @@ class SSHProxyHandler(paramiko.ServerInterface):
         self.target_server = result['server']
         self.authenticated_user = result['user']
         self.matching_policies = result.get('policies', [])
+        self.access_result = result  # Store full result for effective_end_time
         self.ssh_login = username  # SSH login for backend (e.g., "ideo")
         self.client_key = key
         
@@ -1801,10 +1803,18 @@ class SSHProxyServer:
             # Check grant expiry for interactive shell sessions
             grant_end_time = None
             if server_handler.channel_type == 'shell' and server_handler.matching_policies:
-                # Get earliest expiry time from policies that granted access
-                end_times = [p.end_time for p in server_handler.matching_policies if p.end_time]
-                if end_times:
-                    grant_end_time = min(end_times)
+                # Use effective_end_time from access control if available
+                # This considers both policy end_time AND schedule window end
+                if hasattr(server_handler, 'access_result') and server_handler.access_result:
+                    grant_end_time = server_handler.access_result.get('effective_end_time')
+                
+                # Fallback to old behavior (earliest policy end_time)
+                if grant_end_time is None:
+                    end_times = [p.end_time for p in server_handler.matching_policies if p.end_time]
+                    if end_times:
+                        grant_end_time = min(end_times)
+                
+                if grant_end_time:
                     logger.info(f"Session {session_id}: Grant expires at {grant_end_time}")
                     
                     # Send welcome message

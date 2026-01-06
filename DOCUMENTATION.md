@@ -13,7 +13,7 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 - **Roadmap**: [ROADMAP.md](ROADMAP.md) - Development history and future plans
 - **Dependencies**: See [requirements.txt](requirements.txt) and [requirements-pyrdp-converter.txt](requirements-pyrdp-converter.txt)
 
-## Architecture (Current State - v1.5)
+## Architecture (Current State - v1.6)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -195,35 +195,41 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 
 ## Access Control Logic
 
-### SSH Access Control
+### SSH Access Control (with Schedule Support v1.6)
 1. Client connects with username + source IP
-2. `AccessControlEngine.check_access(db, source_ip, username)`
-3. Validates:
-   - User exists and is active
-   - Source IP matches user's registered source_ip
-   - Active grant exists (start_time <= now <= end_time)
-   - Target server is active
-4. If OK: Connect to backend with agent forwarding
-5. If DENIED: Close connection, log to audit_logs
+2. `AccessControlEngineV2.check_access_v2(db, source_ip, dest_ip, protocol='ssh', ssh_login, check_time)`
+3. Step 1: Find user by source_ip from user_source_ips table
+4. Step 2: Find backend server by dest_ip from ip_allocations table
+5. Step 3: Find matching policies (user direct > group inheritance)
+   - Validates: start_time <= now <= end_time (or NULL)
+   - Protocol match: NULL (all) or 'ssh'
+   - Source IP match: NULL (all IPs) or specific user_source_ip_id
+   - Scope match: group/server/service level
+6. **Step 3.5** (NEW v1.6): Schedule filtering
+   - For policies with `use_schedules=True`:
+     - Query `policy_schedules` table for active rules
+     - Check current time against weekdays, time range, months, days_of_month
+     - Timezone conversion: UTC → policy timezone (pytz)
+     - OR logic: If ANY schedule matches, allow
+     - If NO schedule matches: DENY with "Outside allowed time windows"
+7. Step 4: SSH login restrictions (if applicable)
+   - Check policy_ssh_logins table for allowed login names
+   - If restrictions defined and login not allowed: DENY
+8. **Smart Expiry Calculation** (NEW v1.6):
+   - Calculate `effective_end_time = min(policy.end_time, schedule_window_end)`
+   - Used for grant expiry warnings and auto-disconnect
+9. If OK: Connect to backend with agent forwarding
+10. If DENIED: Display banner, log to audit_logs, close connection
 
-### RDP Access Control (Two-Stage)
-1. **Stage 1 - Guard Proxy** (`rdp_guard.py`):
-   - Client connects from source IP
-   - `AccessControlEngine.check_access(db, source_ip, username=None)`
-   - Validates:
-     - User found by source_ip
-     - Active grant exists
-     - Grant's server matches THIS proxy's target_server
-   - If OK: Forward to PyRDP MITM on localhost:13389
-   - If DENIED: Send "ACCESS DENIED" message, close, log to audit_logs
-
-2. **Stage 2 - PyRDP MITM** (with Session Tracking ⭐):
-   - Receives connection from guard proxy
+### RDP Access Control (Direct PyRDP MITM)
+**PyRDP MITM** (with Session Tracking ⭐):
+   - Client connects directly to pyrdp-mitm on 0.0.0.0:3389
    - Performs full RDP MITM
    - Records session to `.pyrdp` files
    - Connects to backend Windows server
    - Creates/closes Session records in database
    - Tracks session duration and recording file size
+   - Access control handled by pre-connection validation (if implemented)
 
 ## File Structure
 
@@ -309,6 +315,34 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 - `action` (e.g., 'ssh_access_granted', 'rdp_access_denied')
 - `resource_type`, `resource_id`, `source_ip`
 - `success` (Boolean), `details` (TEXT), `timestamp`
+
+### policy_schedules (NEW in v1.6) ⭐
+Recurring time-based access control for policies:
+- `id` (PK), `policy_id` (FK to access_policies, CASCADE delete)
+- `name` (VARCHAR 255) - Human-readable schedule name
+- `weekdays` (INTEGER[]) - Array of weekdays (0=Mon, 6=Sun, NULL=all)
+- `time_start` (TIME) - Daily start time (NULL=00:00)
+- `time_end` (TIME) - Daily end time (NULL=23:59), supports overnight (22:00-02:00)
+- `months` (INTEGER[]) - Array of months (1-12, NULL=all)
+- `days_of_month` (INTEGER[]) - Array of days (1-31, NULL=all)
+- `timezone` (VARCHAR 50) - Timezone string (default 'Europe/Warsaw', uses pytz)
+- `is_active` (BOOLEAN) - Enable/disable schedule rule
+- `created_at` (TIMESTAMP)
+
+**Use Cases**:
+- Business hours: Mon-Fri 08:00-16:00
+- Weekend maintenance: Sat-Sun only
+- Monthly backups: First day of month 04:00-08:00
+- Seasonal access: Only in specific months
+- Overnight shifts: 22:00-02:00 (crosses midnight)
+
+**Access Control Integration**:
+- Policy with `use_schedules=True` enables schedule checking (Step 3.5)
+- Multiple schedules per policy with OR logic (if ANY matches, allow)
+- No schedules = access disabled
+- Timezone-aware: Converts UTC to policy timezone for comparison
+- **Smart Expiry**: `effective_end_time = min(policy.end_time, schedule_window_end)`
+  - User gets warnings about schedule closing (e.g., 16:00 today), not distant policy expiry (e.g., Jan 31)
 
 ### sessions (NEW in v1.1) ⭐
 Real-time session tracking for active and historical connections:
@@ -689,11 +723,8 @@ policy.port_forwarding_allowed = True
 # SSH Proxy
 cd /opt/jumphost && sudo /opt/jumphost/venv/bin/python src/proxy/ssh_proxy.py &
 
-# RDP Backend (PyRDP MITM)
-sudo /opt/jumphost/src/proxy/rdp_wrapper.sh &
-
-# RDP Guard (Access Control)
-cd /opt/jumphost && sudo /opt/jumphost/venv/bin/python src/proxy/rdp_guard.py &
+# RDP Proxy (PyRDP MITM) - managed by systemd as rdp-proxy.service
+# Direct pyrdp-mitm, no guard/wrapper needed
 
 # Web GUI (Development)
 cd /opt/jumphost/src/web && /opt/jumphost/venv/bin/python app.py &
@@ -705,8 +736,7 @@ cd /opt/jumphost/src/web && /opt/jumphost/venv/bin/gunicorn --bind 0.0.0.0:5000 
 ### Stop Services
 ```bash
 sudo pkill -f ssh_proxy
-sudo pkill -f rdp_wrapper
-sudo pkill -f rdp_guard
+sudo systemctl stop rdp-proxy  # PyRDP MITM
 pkill -f "python.*app.py"
 pkill -f gunicorn
 ```
@@ -714,8 +744,8 @@ pkill -f gunicorn
 ### View Logs
 ```bash
 tail -f /var/log/jumphost/ssh_proxy.log
-tail -f /var/log/jumphost/rdp_guard.log
-tail -f /var/log/jumphost/rdp_wrapper.log
+tail -f /var/log/jumphost/rdp/*.log  # RDP recordings logs
+sudo journalctl -u rdp-proxy -f  # PyRDP MITM service
 tail -f /tmp/flask.log  # Web GUI logs
 ```
 

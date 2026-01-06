@@ -3,9 +3,10 @@ Access Policies Blueprint - Policy management
 """
 from flask import Blueprint, render_template, g, request, redirect, url_for, flash, abort
 from flask_login import login_required
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+import json
 
-from src.core.database import AccessPolicy, User, UserSourceIP, Server, ServerGroup, PolicySSHLogin, UserGroup
+from src.core.database import AccessPolicy, User, UserSourceIP, Server, ServerGroup, PolicySSHLogin, UserGroup, PolicySchedule
 from src.core.duration_parser import parse_duration, format_duration
 
 policies_bp = Blueprint('policies', __name__)
@@ -148,6 +149,32 @@ def add():
                             allowed_login=login
                         )
                         db.add(ssh_login)
+            
+            # Add schedules if enabled
+            use_schedules = request.form.get('use_schedules') == 'on'
+            if use_schedules:
+                policy.use_schedules = True
+                schedules_json = request.form.get('schedules_json')
+                if schedules_json:
+                    try:
+                        schedules = json.loads(schedules_json)
+                        for schedule_data in schedules:
+                            schedule = PolicySchedule(
+                                policy_id=policy.id,
+                                name=schedule_data['name'],
+                                weekdays=schedule_data.get('weekdays'),
+                                time_start=datetime.strptime(schedule_data['time_start'], '%H:%M').time() if schedule_data.get('time_start') else None,
+                                time_end=datetime.strptime(schedule_data['time_end'], '%H:%M').time() if schedule_data.get('time_end') else None,
+                                months=schedule_data.get('months'),
+                                days_of_month=schedule_data.get('days_of_month'),
+                                timezone=schedule_data.get('timezone', 'Europe/Warsaw'),
+                                is_active=True
+                            )
+                            db.add(schedule)
+                    except Exception as e:
+                        db.rollback()
+                        flash(f'Error parsing schedules: {str(e)}', 'danger')
+                        return redirect(url_for('policies.add'))
             
             db.commit()
             flash('Access policy created successfully!', 'success')

@@ -273,7 +273,7 @@ jumphost/
 │   │   └── nat_manager.py          # NAT configuration
 │   ├── proxy/
 │   │   ├── ssh_proxy.py            # SSH proxy server
-│   │   └── rdp_guard.py            # RDP proxy wrapper
+│   │   └── rdp_wrapper.sh          # RDP startup script (systemd)
 │   └── cli/
 │       └── jumphost_cli.py         # Command-line interface
 ├── alembic/

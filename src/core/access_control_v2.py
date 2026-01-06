@@ -8,8 +8,9 @@ import logging
 from .database import (
     User, Server, AccessGrant, AuditLog, IPAllocation,
     UserSourceIP, ServerGroup, ServerGroupMember, AccessPolicy, PolicySSHLogin,
-    UserGroup, UserGroupMember, get_all_user_groups, get_all_server_groups
+    UserGroup, UserGroupMember, PolicySchedule, get_all_user_groups, get_all_server_groups
 )
+from .schedule_checker import check_policy_schedules
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +71,66 @@ class AccessControlEngineV2:
             logger.error(f"Error looking up backend for proxy IP {proxy_ip}: {e}", exc_info=True)
             return None
     
+    def check_schedule_access(
+        self,
+        db: Session,
+        policy: 'AccessPolicy',
+        check_time: Optional[datetime] = None
+    ) -> tuple[bool, Optional[str]]:
+        """
+        Check if policy allows access at given time based on schedules.
+        
+        Args:
+            db: Database session
+            policy: AccessPolicy object
+            check_time: Time to check (default: now)
+        
+        Returns:
+            (has_access: bool, reason: str or None)
+            - If use_schedules=False: (True, None) - schedule checking disabled
+            - If no schedules defined: (True, None) - allow access
+            - If schedule matches: (True, schedule_name)
+            - If no schedule matches: (False, "Outside allowed time windows")
+        """
+        if not policy.use_schedules:
+            # Schedule-based access disabled for this policy
+            return (True, None)
+        
+        # Get all schedules for this policy
+        schedules = db.query(PolicySchedule).filter(
+            PolicySchedule.policy_id == policy.id,
+            PolicySchedule.is_active == True
+        ).all()
+        
+        # Convert to dict format for checker
+        schedule_dicts = []
+        for s in schedules:
+            schedule_dicts.append({
+                'name': s.name,
+                'weekdays': s.weekdays,
+                'time_start': s.time_start,
+                'time_end': s.time_end,
+                'months': s.months,
+                'days_of_month': s.days_of_month,
+                'timezone': s.timezone,
+                'is_active': s.is_active
+            })
+        
+        matches, matched_name = check_policy_schedules(schedule_dicts, check_time)
+        
+        if not matches:
+            return (False, "Outside allowed time windows")
+        
+        return (True, matched_name)
+    
     def check_access_v2(
         self,
         db: Session,
         source_ip: str,
         dest_ip: str,
         protocol: str,
-        ssh_login: Optional[str] = None
+        ssh_login: Optional[str] = None,
+        check_time: Optional[datetime] = None
     ) -> dict:
         """
         New flexible policy-based access control.
@@ -87,6 +141,7 @@ class AccessControlEngineV2:
             dest_ip: Destination proxy IP (to identify target server)
             protocol: 'ssh' or 'rdp'
             ssh_login: SSH login name (only for SSH protocol)
+            check_time: Time to check access (default: now/utcnow)
             
         Returns:
             dict with:
@@ -97,6 +152,10 @@ class AccessControlEngineV2:
                 - policies: List of matching AccessPolicy objects
                 - reason: str explaining decision
         """
+        # Default to now if not provided
+        if check_time is None:
+            check_time = datetime.utcnow()
+        
         try:
             # Step 1: Find user by source_ip
             user_ip = db.query(UserSourceIP).filter(
@@ -147,7 +206,7 @@ class AccessControlEngineV2:
             server = backend_info['server']
             
             # Step 3: Find matching policies with PRIORITY: user > group
-            now = datetime.utcnow()
+            now = check_time
             
             # Get all server groups (including parent groups)
             server_group_ids = get_all_server_groups(server.id, db)
@@ -276,6 +335,33 @@ class AccessControlEngineV2:
                     'reason': f'No matching access policy'
                 }
             
+            # Step 3.5: Filter policies by schedule (if use_schedules enabled)
+            schedule_filtered_policies = []
+            for policy in matching_policies:
+                schedule_ok, schedule_name = self.check_schedule_access(db, policy, now)
+                if schedule_ok:
+                    schedule_filtered_policies.append(policy)
+                    if schedule_name:
+                        logger.debug(f"Policy {policy.id} schedule matched: {schedule_name}")
+                else:
+                    logger.debug(f"Policy {policy.id} schedule check failed: outside time window")
+            
+            if not schedule_filtered_policies:
+                logger.warning(
+                    f"Access denied: No policy active at this time for {user.username} "
+                    f"from {source_ip} to {server.name} ({protocol})"
+                )
+                return {
+                    'has_access': False,
+                    'user': user,
+                    'user_ip': user_ip,
+                    'server': server,
+                    'policies': matching_policies,  # Show which policies exist but are inactive
+                    'reason': 'Outside allowed time windows'
+                }
+            
+            matching_policies = schedule_filtered_policies
+            
             # Step 4: For SSH with group policies, check login restrictions
             # (Direct user policies already filtered ssh_login above)
             if protocol == 'ssh' and ssh_login and not direct_user_policies:
@@ -319,13 +405,51 @@ class AccessControlEngineV2:
                 f") - {len(matching_policies)} matching policies"
             )
             
+            # Calculate effective end time (earliest of: policy end_time or schedule window end)
+            effective_end_time = None
+            policy_end_times = [p.end_time for p in matching_policies if p.end_time]
+            
+            if policy_end_times:
+                # Get earliest policy end_time
+                earliest_policy_end = min(policy_end_times)
+                effective_end_time = earliest_policy_end
+                
+                # Check if any policy has schedules - find earliest schedule window end
+                from src.core.schedule_checker import get_earliest_schedule_end
+                
+                for policy in matching_policies:
+                    if policy.use_schedules:
+                        # Get schedules for this policy
+                        schedule_rules = []
+                        for s in policy.schedules:
+                            if s.is_active:
+                                schedule_rules.append({
+                                    'name': s.name,
+                                    'weekdays': s.weekdays,
+                                    'time_start': s.time_start,
+                                    'time_end': s.time_end,
+                                    'months': s.months,
+                                    'days_of_month': s.days_of_month,
+                                    'timezone': s.timezone,
+                                    'is_active': s.is_active
+                                })
+                        
+                        if schedule_rules:
+                            schedule_end = get_earliest_schedule_end(schedule_rules, now)
+                            if schedule_end:
+                                # Use earliest of: policy end_time or schedule window end
+                                if effective_end_time is None or schedule_end < effective_end_time:
+                                    effective_end_time = schedule_end
+                                    logger.info(f"Effective end_time adjusted to schedule window end: {schedule_end}")
+            
             return {
                 'has_access': True,
                 'user': user,
                 'user_ip': user_ip,
                 'server': server,
                 'policies': matching_policies,
-                'reason': 'Access granted'
+                'reason': 'Access granted',
+                'effective_end_time': effective_end_time  # NEW: earliest of policy end or schedule window end
             }
             
         except Exception as e:
