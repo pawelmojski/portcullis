@@ -1,450 +1,556 @@
-# 🚀 Jumphost Project - SSH/RDP Proxy with Web Management Interface
+# 🏰 Portcullis - SSH/RDP Gateway with Policy-Based Access Control
 
-**Production-ready SSH and RDP jumphost with policy-based access control, session recording, dynamic IP routing, and Flask Web GUI.**
+**A transparent security gateway that stands between your users and backend servers, enforcing access policies, recording sessions, and providing centralized management.**
 
 [![Status](https://img.shields.io/badge/status-production-brightgreen)]()
-[![Version](https://img.shields.io/badge/version-1.1-blue)]()
+[![Version](https://img.shields.io/badge/version-1.8-blue)]()
 [![Python](https://img.shields.io/badge/python-3.13-blue)]()
-[![License](https://img.shields.io/badge/license-Proprietary-red)]()
 
 ---
 
-## 📋 Overview
+## 💡 What is Portcullis?
 
-Jumphost is a comprehensive SSH and RDP proxy solution designed for enterprise environments requiring:
-- **Web Management Interface** - Modern Flask-based GUI with Bootstrap 5
-- **Granular access control** based on source IP, user, server groups, and protocols
-- **Session recording** for compliance and audit purposes
-- **Temporal permissions** with automatic expiration
-- **Transparent authentication** with SSH agent forwarding support
-- **Dynamic backend routing** using IP allocation pool
-- **Real-time monitoring** with charts and audit logs
+Imagine you have 50 servers and 20 employees. Each employee needs access to different servers at different times. Traditional approach: create accounts on each server, manage SSH keys, remember who has access where, manually revoke when someone leaves.
 
-### Architecture
+**Portcullis sits in the middle** and solves this:
 
-```
-Client (100.64.0.X)
-    ↓
-Jumphost (10.0.160.5)
-    ├─ Web GUI (Port 5000) ───→ Management Interface
-    ├─ SSH Proxy (Port 22) ───→ Backend SSH Server (10.30.0.X:22)
-    └─ RDP Proxy (Port 3389) ─→ Backend RDP Server (10.30.0.X:3389)
-    
-Access Control V2:
-    • Multiple source IPs per user
-    • Server groups (tags)
-    • Group/Server/Service-level permissions
-    • Protocol filtering (SSH, RDP, both)
-    • SSH login restrictions
-    
-Web Management:
-    • User management (CRUD + source IPs)
-    • Server management (CRUD + IP allocation)
-    • Group management (N:M relationships)
-    • Policy wizard (grant/revoke access)
-    • Dashboard (service status, statistics, charts)
-    • Monitoring (audit logs, connection charts)
-```
+\`\`\`
+User's Computer → Portcullis Gateway → Backend Server
+    (anywhere)        (one place)         (10.0.x.x)
+\`\`\`
+
+From user's perspective: \`ssh server.company.com\` - works like normal SSH/RDP.
+Behind the scenes: Portcullis checks "does this user have permission RIGHT NOW?" and either allows or denies.
+
+### Key Concept: Time-Limited Access Grants
+
+Instead of permanent accounts, you **grant temporary access**:
+
+\`\`\`bash
+# Give Alice 8 hours access to production database
+portcullis grant alice --server prod-db-01 --duration 8h
+
+# Alice can now: ssh alice@prod-db-01
+# After 8 hours: Access automatically expires, no cleanup needed
+\`\`\`
+
+Everything is:
+- ✅ **Centralized** - one place to manage all access
+- ✅ **Temporary** - access expires automatically
+- ✅ **Audited** - every connection recorded
+- ✅ **Flexible** - grant access to groups, single servers, or specific protocols
 
 ---
 
-## ✨ Features
+## 🎯 How It Works
 
-### Web Management Interface 🆕
-- ✅ **Flask Web GUI** - Modern Bootstrap 5 interface
-- ✅ **Dashboard** - Service status, statistics, recent activity
-- ✅ **User Management** - CRUD operations + multiple source IPs
-- ✅ **Server Management** - CRUD + automatic IP allocation
-- ✅ **Group Management** - Create groups, assign servers (N:M)
-- ✅ **Policy Wizard** - Grant access with scope (group/server/service)
-- ✅ **Monitoring** - Audit logs with filters, connection charts
-- ✅ **Authentication** - Placeholder (admin/admin) ready for Azure AD
-- ✅ **Responsive Design** - Mobile-friendly layout
+### 1. The Gateway (Portcullis)
 
-### Access Control V2
-- ✅ **Multiple Source IPs** - Users can connect from home, office, VPN, etc.
-- ✅ **Server Groups** - Organize servers with tags, N:M relationships
-- ✅ **Granular Permissions** - Group-level, server-level, or service-level
-- ✅ **Protocol Filtering** - Restrict to SSH, RDP, or allow both
-- ✅ **SSH Login Restrictions** - Control which system accounts can be used
-- ✅ **Temporal Access** - Time-limited permissions with automatic expiration
+Portcullis runs on a single server (e.g., \`gateway.company.com\`):
+- **Port 22** - SSH traffic goes through here
+- **Port 3389** - RDP traffic goes through here
+- **Port 5000** - Web management interface
 
-### SSH Proxy
-- ✅ **Transparent Authentication** - SSH agent forwarding + password fallback
-- ✅ **PTY Support** - Full terminal emulation
-- ✅ **SCP/SFTP** - File transfer protocols supported
-- ✅ **Session Recording** - Asciinema format for playback
-- ✅ **Dynamic Backend Routing** - IP-based destination lookup
+### 2. Access Grants (Policies)
 
-### RDP Proxy
-- ✅ **PyRDP MITM** - Full RDP protocol support
-- ✅ **Session Recording** - PyRDP custom format with replay capability
-- ✅ **TLS Support** - Encrypted connections
-- ✅ **Channel Support** - rdpdr, rdpsnd, cliprdr, drdynvc
-- ✅ **Smart Card Redirection** - Hardware token support
+You manage access through **policies** (grants):
 
-### Infrastructure
-- ✅ **PostgreSQL Database** - Robust storage with JSONB support
-- ✅ **Alembic Migrations** - Version-controlled schema changes
-- ✅ **CLI Management** - Complete command-line interface
-- ✅ **Web GUI** - Flask-based management interface
-- ✅ **Audit Logging** - All access attempts logged to database
+**Example: Grant group access**
+\`\`\`
+User: john
+Target: All servers in "Production Databases" group
+Protocol: SSH only
+Duration: 24 hours
+SSH logins: postgres, readonly
+\`\`\`
 
----
+When John tries to connect:
+\`\`\`bash
+john@laptop:~$ ssh postgres@prod-db-01.company.com
+# ↓ Connection goes to Portcullis
+# ↓ Portcullis checks: Does john have active grant for prod-db-01?
+# ✅ YES - proxy connection to real prod-db-01 server
+# ❌ NO - show friendly "access denied" message
+\`\`\`
 
-## 🎨 Web Interface
+### 3. What User Sees
 
-Access the web management interface at `http://10.0.160.5:5000`
+**WITH ACCESS GRANT:**
+\`\`\`bash
+$ ssh myuser@target-server
+# Works exactly like normal SSH
+# User doesn't even know Portcullis is there
+\`\`\`
 
-**Default credentials**: `admin` / `admin`
+**WITHOUT ACCESS GRANT:**
+\`\`\`
++====================================================================+
+|                          ACCESS DENIED                             |
++====================================================================+
 
-### Features:
+  Dear user,
 
-#### 📊 Dashboard
-- Service status indicators (SSH Proxy, RDP Proxy, PostgreSQL)
-- Statistics cards (users, servers, policies, connections)
-- Today's activity summary with success rate
-- Active sessions list
-- Recent audit log entries
+  There is no active access grant for your IP address: 100.64.0.20
 
-#### 👥 User Management
-- List all users with source IPs and policy counts
-- Add new users with multiple source IPs
-- Edit user details
-- View user details (info, source IPs, policies)
-- Add/remove/toggle source IPs per user
-- Delete users
+  Reason: No matching access policy
 
-#### 🖥️ Server Management
-- List all servers with proxy IPs and protocols
-- Add new servers with automatic IP allocation
-- Edit server details
-- View server details (info, IP allocation, group memberships)
-- Enable/disable SSH and RDP protocols
-- Delete servers
+  Please contact your administrator to request access.
+\`\`\`
 
-#### 📁 Group Management
-- List all server groups
-- Create new groups
-- Edit group details
-- View group members
-- Add/remove servers from groups
-- Delete groups
+### 4. Session Recording
 
-#### 🔑 Policy Management
-- List all access policies with filters
-- Grant access wizard with scope types:
-  - **Group**: All servers in a group
-  - **Server**: Single server (all protocols)
-  - **Service**: Single server + specific protocol
-- Protocol filtering (SSH, RDP, or both)
-- SSH login restrictions (specific system accounts)
-- Temporal access (duration in hours)
-- Revoke or delete policies
+Every connection is recorded:
+- **SSH sessions** - Full terminal recording (like asciinema)
+- **RDP sessions** - Video recording with playback
+- **Audit log** - Who connected when, from where, to which server
 
-#### 📈 Monitoring
-- Audit log viewer with pagination (50 per page)
-- Filters: action type, user, date range
-- Connection charts:
-  - Hourly connections (last 24 hours)
-  - Top users by connections (last 7 days)
-- Chart.js integration for live updates
+Web interface shows:
+- Active sessions (who is connected right now)
+- Session history (search by user, server, date)
+- Live view (watch SSH session in real-time)
+- Recording playback
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Real-World Example
 
-### Prerequisites
-- Debian 13 (Trixie) or compatible
-- Python 3.13+
-- PostgreSQL 17+
-- Network: 10.0.160.128/25 IP pool
+### Scenario: Emergency Database Access
+
+**9:00 AM** - Database issue reported
+
+**Team Lead:**
+\`\`\`bash
+# Grant DBA access for 4 hours
+portcullis grant alice --server prod-db-01 --duration 4h --protocol ssh
+\`\`\`
+
+**Alice (from home, VPN, or office):**
+\`\`\`bash
+alice@laptop:~$ ssh postgres@prod-db-01
+# Works immediately, no keys to copy, no server accounts to create
+\`\`\`
+
+**1:00 PM** - Issue resolved, access expires automatically
+
+**Later** - Team lead reviews:
+- Web UI shows Alice connected 9:15-10:30
+- Can watch terminal recording to see what commands were run
+- Audit log shows connection from IP 100.64.0.25
+
+---
+
+## 🎨 Web Management Interface
+
+Access at \`http://gateway.company.com:5000\`
+
+### Dashboard
+- 🟢 Service status (SSH Proxy, RDP Proxy running)
+- 📊 Quick stats (15 users, 42 servers, 8 active sessions)
+- 📅 Today's activity (23 connections, 2 denied, 91% success rate)
+- 🔄 Auto-refresh every 5 seconds
+
+### Grant Access Wizard
+
+**Simple 3-step process:**
+
+1. **Who?** Select user (or create new)
+2. **Where?** Choose:
+   - Server group (e.g., "All production DBs")
+   - Single server (e.g., "app-server-01")
+   - Specific service (e.g., "db-01 SSH only")
+3. **How long?** Enter duration: \`2h\`, \`3d\`, \`1w\`, or \`permanent\`
+
+**Advanced options:**
+- Protocol filtering (SSH only, RDP only, or both)
+- SSH login restrictions (only \`postgres\` and \`readonly\` accounts)
+- Schedule windows (Monday-Friday 9-17)
+
+### Search Everything (Mega-Wyszukiwarka) 🔍
+
+Unified search across all data:
+- Search by username, server name, IP address
+- Filter by protocol, status (active/denied), date range
+- Auto-refresh every 2 seconds (see new sessions appear live)
+- Export to CSV for reporting
+
+**Examples:**
+\`\`\`
+Search: "alice"          → All sessions by user alice
+Search: "10.0.1.50"      → All connections to/from this IP
+Search: "#42"            → Policy #42 details
+Search: "denied"         → All denied connection attempts
+\`\`\`
+
+---
+
+## 🏗️ Architecture
+
+### Simple Deployment (Current)
+
+\`\`\`
+┌─────────────────────────────────────────┐
+│         Portcullis Gateway              │
+│  ┌─────────────┐  ┌──────────────────┐ │
+│  │  SSH Proxy  │  │   RDP Proxy      │ │
+│  │   (port 22) │  │   (port 3389)    │ │
+│  └─────────────┘  └──────────────────┘ │
+│  ┌─────────────┐  ┌──────────────────┐ │
+│  │  Flask Web  │  │   PostgreSQL     │ │
+│  │ (port 5000) │  │  (policies, logs)│ │
+│  └─────────────┘  └──────────────────┘ │
+└─────────────────────────────────────────┘
+           │
+           │ Routes to backend servers
+           ↓
+    ┌──────────────┐  ┌──────────────┐
+    │  Backend     │  │  Backend     │
+    │  Server 1    │  │  Server 2    │
+    └──────────────┘  └──────────────┘
+\`\`\`
+
+### Distributed Architecture (v1.9 - Coming Soon)
+
+\`\`\`
+         ┌──────────────────────────┐
+         │    Tower (Control)       │
+         │  - Web UI                │
+         │  - Policy Database       │
+         │  - API Server            │
+         └────────────┬─────────────┘
+                      │
+        ┬─────────────┼─────────────┬
+        │             │             │
+   ┌────▼───┐    ┌───▼────┐    ┌───▼────┐
+   │ Gate 1 │    │ Gate 2 │    │ Gate 3 │
+   │  DMZ   │    │ Cloud  │    │ Office │
+   └────────┘    └────────┘    └────────┘
+\`\`\`
+
+**Use case:** Install Portcullis gate in different network segments (DMZ, cloud, office) - all managed from single Tower.
+
+---
+
+## 💎 Features
+
+### Access Control
+- ✅ **Multiple source IPs per user** - Home, office, VPN, mobile
+- ✅ **Server groups** - Grant access to entire groups ("All production servers")
+- ✅ **Granular scope** - Group level, server level, or protocol level
+- ✅ **Protocol filtering** - SSH only, RDP only, or both
+- ✅ **SSH login restrictions** - Allow only specific system accounts
+- ✅ **Temporal access** - Time-limited with automatic expiration
+- ✅ **Schedule windows** - Access only Mon-Fri 9-17, recurring weekly
+- ✅ **Recursive groups** - User groups with inheritance
+
+### Session Management
+- ✅ **Live monitoring** - See active sessions in real-time
+- ✅ **SSH live view** - Watch terminal session as it happens
+- ✅ **Recording** - SSH (terminal) and RDP (video)
+- ✅ **Playback** - Review past sessions
+- ✅ **Search** - Find sessions by user, server, time, status
+- ✅ **Auto-refresh** - Dashboard updates every 5s, search every 2s
+
+### Auditing
+- ✅ **Connection attempts** - Both successful and denied
+- ✅ **Policy changes** - Full audit trail with history
+- ✅ **Denial reasons** - Clear logging why access was denied
+- ✅ **Export** - CSV export for reporting/compliance
+
+### User Experience
+- ✅ **Transparent** - Works with standard SSH/RDP clients
+- ✅ **Friendly errors** - Clear messages when access denied
+- ✅ **No config** - Users just \`ssh server\`, no special setup
+- ✅ **Agent forwarding** - SSH keys work naturally
+
+---
+
+## 🔧 Quick Start
 
 ### Installation
 
-```bash
-# Clone repository
-git clone /opt/jumphost
-cd /opt/jumphost
+\`\`\`bash
+# Install system dependencies
+sudo apt install postgresql python3.13 python3-pip python3-venv
 
-# Create virtual environment
+# Clone repository
+git clone https://github.com/yourusername/portcullis
+cd portcullis
+
+# Setup virtual environment
 python3 -m venv venv
 source venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Setup database
-createdb jumphost
+# Initialize database
+sudo -u postgres createdb portcullis
 alembic upgrade head
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your database credentials
-```
+# Start services
+sudo systemctl enable --now portcullis-ssh-proxy
+sudo systemctl enable --now portcullis-rdp-proxy
+sudo systemctl enable --now portcullis-flask
+\`\`\`
 
-### Starting Services
+### First Use
 
-```bash
-# SSH Proxy
-sudo python3 /opt/jumphost/src/proxy/ssh_proxy.py &
-
-# RDP Proxy
-sudo /opt/jumphost/venv/bin/pyrdp-mitm \
-  -a 0.0.0.0 -l 3389 \
-  -o /var/log/jumphost/rdp_recordings \
-  127.0.0.1 > /var/log/jumphost/rdp_proxy.log 2>&1 &
-```
-
----
-
-## 📖 Usage Examples
-
-### User Management
-
-```bash
-# Add user
-./src/cli/jumphost_cli.py add-user john --full-name "John Doe" --email john@example.com
-
-# Add source IPs for user
-./src/cli/jumphost_cli.py add-user-ip john 192.168.1.100 --label "Home"
-./src/cli/jumphost_cli.py add-user-ip john 10.0.0.50 --label "Office"
-./src/cli/jumphost_cli.py add-user-ip john 100.64.0.10 --label "VPN"
-```
-
-### Server Management
-
-```bash
-# Add server
-./src/cli/jumphost_cli.py add-server prod-db-01 10.30.0.100
-
-# Create server group
-./src/cli/jumphost_cli.py add-server-group "Production DB" --description "Production databases"
-
-# Add server to group
-./src/cli/jumphost_cli.py add-server-to-group prod-db-01 "Production DB"
-```
-
-### Access Policies
-
-```bash
-# Grant group-level access (all servers in group)
-./src/cli/jumphost_cli.py grant-policy john group "Production DB" --duration-hours 8
-
-# Grant server-level access (specific server, all protocols)
-./src/cli/jumphost_cli.py grant-policy mary server bastion-host --duration-hours 24
-
-# Grant service-level access (specific server + protocol)
-./src/cli/jumphost_cli.py grant-policy bob service app-server-01 --protocol ssh
-
-# Grant with SSH login restrictions
-./src/cli/jumphost_cli.py grant-policy alice server db-01 \
-  --protocol ssh \
-  --ssh-logins postgres --ssh-logins monitoring
-```
-
-### Connecting as Client
-
-```bash
-# SSH with agent forwarding (recommended)
-ssh -A user@10.0.160.129
-
-# SSH with password (if agent forwarding not available)
-ssh -o PubkeyAuthentication=no user@10.0.160.129
-
-# RDP (Windows client)
-mstsc /v:10.0.160.130
-
-# RDP (Linux client)
-xfreerdp /v:10.0.160.130 /u:Administrator
-```
+1. **Access web interface:** http://your-server:5000
+2. **Add yourself as user:**
+   - Users → Add User
+   - Enter your name, email
+   - Add your source IP (see "My IP: X.X.X.X" in top right)
+3. **Add a backend server:**
+   - Servers → Add Server
+   - Name: \`test-server\`, IP: \`10.0.1.100\`
+4. **Grant yourself access:**
+   - Policies → Grant Access
+   - Select yourself, select server, duration \`1h\`
+5. **Test connection:**
+   \`\`\`bash
+   ssh your-username@test-server
+   \`\`\`
 
 ---
 
-## 🗂️ Project Structure
+## 📖 Common Use Cases
 
-```
-jumphost/
-├── src/
-│   ├── core/
-│   │   ├── access_control_v2.py    # Access control engine
-│   │   ├── database.py             # ORM models
-│   │   ├── ip_pool.py              # IP allocation manager
-│   │   └── nat_manager.py          # NAT configuration
-│   ├── proxy/
-│   │   ├── ssh_proxy.py            # SSH proxy server
-│   │   └── rdp_wrapper.sh          # RDP startup script (systemd)
-│   └── cli/
-│       └── jumphost_cli.py         # Command-line interface
-├── alembic/
-│   └── versions/                   # Database migrations
-├── venv/                           # Python virtual environment
-├── logs/                           # Application logs
-├── DOCUMENTATION.md                # General documentation
-├── FLEXIBLE_ACCESS_CONTROL_V2.md   # V2 system documentation
-├── ROADMAP.md                      # Project roadmap
-└── MILESTONE_v1.0.md               # Release notes
+### 1. Contractor Access
 
-External Modifications:
-└── venv/lib/python3.13/site-packages/pyrdp/core/mitm.py
-```
+**Problem:** Need to give contractor temporary access to specific servers.
 
----
+**Solution:**
+\`\`\`bash
+# Add contractor
+portcullis user add contractor-john --email john@external.com
+portcullis user add-ip contractor-john 203.0.113.50 --label "Contractor VPN"
 
-## 🔧 Configuration
+# Grant 2-week access to dev servers only
+portcullis grant contractor-john --group "Development Servers" --duration 14d
 
-### Database Schema V2
+# Access automatically expires, no cleanup needed
+\`\`\`
 
-**New Tables:**
-- `user_source_ips` - Multiple IPs per user
-- `server_groups` - Logical server groupings
-- `server_group_members` - N:M server-to-group relationships
-- `access_policies` - Flexible access rules
-- `policy_ssh_logins` - SSH login restrictions
+### 2. On-Call Rotation
 
-### IP Allocation Pool
+**Problem:** Different person has production access each week.
 
-- Range: `10.0.160.128/25`
-- Proxy IPs: Allocated from pool
-- Backend IPs: Mapped in `ip_allocations` table
+**Solution:**
+\`\`\`bash
+# Week 1: Alice on-call
+portcullis grant alice --group "Production" --duration 7d
 
-### Session Recording
+# Week 2: Bob on-call (Alice's grant already expired)
+portcullis grant bob --group "Production" --duration 7d
+\`\`\`
 
-**SSH Sessions:**
-- Location: `/var/log/jumphost/ssh/`
-- Format: Asciinema JSON
-- Playback: `asciinema play <file>`
+### 3. Emergency Access
 
-**RDP Sessions:**
-- Location: `/var/log/jumphost/rdp_recordings/replays/`
-- Format: PyRDP (.pyrdp)
-- Playback: `pyrdp-player.py <file>`
+**Problem:** Database down at 2 AM, need DBA access NOW.
+
+**Solution:**
+\`\`\`bash
+# From phone via curl:
+curl -X POST https://gateway/api/v1/grant \\
+  -H "Authorization: Bearer \$TOKEN" \\
+  -d '{"user":"dba-alice","server":"prod-db","duration":"4h"}'
+
+# DBA can connect immediately from anywhere
+\`\`\`
+
+### 4. Compliance Audit
+
+**Problem:** "Show me everyone who accessed production last month."
+
+**Solution:**
+- Web UI → Search
+- Filter: server_group="Production", date_from="2025-12-01"
+- Export → CSV
+- Done. Full audit trail with session recordings.
 
 ---
 
-## 🧪 Testing
+## 🎓 Key Concepts
 
-### Production Validation
+### Policies (Grants)
 
-**Test User:** p.mojski  
-**Test Date:** 2026-01-04  
-**Results:** 13/13 scenarios passed ✅
+A policy is: "User X can access Target Y via Protocol Z for Duration D"
 
-**Test Coverage:**
-- SSH authentication (agent forwarding + password)
-- RDP connection and session recording
-- Group-level access control
-- Server-level access control
-- Service-level access control (protocol filtering)
-- SSH login restrictions
-- Access denials (no policy, wrong protocol, wrong login)
+**Components:**
+- **User** - Who gets access
+- **Target** - Server group, single server, or specific service
+- **Protocol** - SSH, RDP, or both
+- **Duration** - How long (or permanent)
+- **Schedule** (optional) - Time windows (e.g., business hours only)
+- **SSH logins** (optional) - Restrict which system accounts
 
----
+### User Source IPs
 
-## 📊 Performance
+Users can have multiple source IPs:
+- Home: \`192.168.1.100\`
+- Office: \`10.0.50.25\`
+- VPN: \`100.64.0.10\`
+- Mobile: \`203.0.113.5\`
 
-- **SSH Latency:** ~10-20ms overhead
-- **RDP Latency:** ~50-100ms overhead
-- **Max Concurrent Sessions:** Tested up to 10
-- **Session Recording Impact:** ~5% CPU per active session
-- **Denied Connection Handling:** ~100-120ms (graceful close)
+When user connects from ANY of these IPs, Portcullis recognizes them.
 
----
+### Server Groups
 
-## 🔒 Security Considerations
+Organize servers logically:
+- "Production Databases"
+- "Development Servers"  
+- "DMZ Web Servers"
 
-### Access Control
-- All access attempts logged to database
-- Source IP verification on every connection
-- Temporal permissions with automatic expiration
-- Protocol-level filtering prevents unauthorized service access
+Grant access to entire group instead of individual servers.
 
-### Session Recording
-- All sessions recorded for audit purposes
-- Recordings stored securely with restricted access
-- Replay capability for investigation
+### Session States
 
-### Authentication
-- SSH agent forwarding for key-based auth
-- Password fallback for compatibility
-- No password storage (pass-through to backend)
+- **Active** - User currently connected
+- **Closed** - Session ended normally
+- **Denied** - Connection attempt blocked (no policy)
 
 ---
 
-## 🐛 Known Issues & Limitations
+## 🔒 Security Features
 
-### RDP Proxy
-- Denied connections initialize PyRDP before close (~100ms overhead)
-- Workaround considered: separate listeners per IP (future optimization)
-- Current solution adequate for enterprise use case
+### Defense in Depth
 
-### SSH Proxy
-- Agent forwarding required for pubkey auth
-- Clear error messages guide users to correct command
+1. **Network Level** - Only Portcullis accessible from internet
+2. **Policy Level** - Fine-grained access control
+3. **Protocol Level** - Filter SSH vs RDP
+4. **Account Level** - Restrict SSH system accounts
+5. **Time Level** - Automatic expiration
+6. **Audit Level** - Everything logged
 
----
+### What Gets Recorded
 
-## 📝 Changelog
+- Connection attempts (successful and denied)
+- Source IP, destination server, protocol
+- Duration, bytes transferred
+- Full session recording (terminal or video)
+- Policy that granted/denied access
+- Denial reason if blocked
 
-### v1.0 (2026-01-04) - Production Release
-- ✅ Flexible Access Control V2 fully integrated
-- ✅ SSH login forwarding fix (use client login, not DB username)
-- ✅ RDP destination IP extraction from socket
-- ✅ Graceful denied connection handling
-- ✅ Production testing: 13/13 scenarios passed
-- ✅ Complete documentation
+### Access Denial
 
----
+When access denied, user sees:
+- Friendly message (not cryptic error)
+- Reason why denied
+- How to request access
 
-## 🛠️ Development
-
-### Critical Files Modified
-
-**Core Application:**
-- `/opt/jumphost/src/proxy/ssh_proxy.py` - SSH login forwarding + agent auth
-- `/opt/jumphost/src/core/access_control_v2.py` - V2 access control engine
-
-**External Dependencies:**
-- `/opt/jumphost/venv/lib/python3.13/site-packages/pyrdp/core/mitm.py` - Access control integration
-- Backup: `pyrdp_mitm_py_MODIFIED_v1.0_20260104.py`
-
-### Backups
-- Working SSH proxy: `ssh_proxy.py.working_backup_20260104_113741`
-- Full project: `/opt/jumphost-v1.0-20260104_120754.tar.gz`
-- Modified PyRDP: `pyrdp_mitm_py_MODIFIED_v1.0_20260104.py`
-
-### Git Repository
-```bash
-# View history
-git log --oneline
-
-# Show tags
-git tag -l
-
-# View specific release
-git show v1.0
-```
+Portcullis logs:
+- Attempted user, server, source IP
+- Denial reason (no policy, expired, wrong protocol, etc.)
+- Timestamp
 
 ---
 
-## 🚧 Future Roadmap
+## 🛠️ Advanced Features
 
-- [ ] Systemd service files (auto-start on boot)
-- [ ] fail2ban integration (DOS protection)
-- [ ] FreeIPA integration (centralized user management)
-- [ ] Web UI for policy management
-- [ ] Real-time session monitoring dashboard
-- [ ] Multi-factor authentication support
-- [ ] Automatic IP allocation on policy grant
-- [ ] Performance optimization: separate listeners per IP
+### Port Forwarding Control
+
+Control who can do SSH port forwarding:
+
+\`\`\`bash
+# Grant with port forwarding allowed
+portcullis grant alice --server bastion \\
+  --allow-port-forwarding local,remote,dynamic
+
+# Grant without port forwarding
+portcullis grant bob --server app-server \\
+  --no-port-forwarding
+\`\`\`
+
+### Schedule-Based Access
+
+Access only during business hours:
+
+\`\`\`bash
+portcullis grant alice --server prod-db \\
+  --schedule "Mon-Fri 09:00-17:00" \\
+  --timezone "Europe/Warsaw"
+\`\`\`
+
+Recurring weekly - user can connect anytime within schedule, automatically blocked outside.
+
+### TPROXY Mode (v1.9)
+
+Transparent proxy for routers (Tailscale, VPN gateways):
+
+\`\`\`bash
+# User thinks they're connecting directly
+ssh user@10.50.1.100
+
+# Iptables routes through Portcullis transparently
+iptables -t mangle -A PREROUTING -p tcp --dport 22 \\
+  -j TPROXY --on-port 2222
+
+# Portcullis sees original destination IP, checks policy
+\`\`\`
 
 ---
 
-## 📞 Support
+## 🚧 Roadmap
 
-**Documentation:** See `FLEXIBLE_ACCESS_CONTROL_V2.md` for detailed API docs  
-**Logs:** `/var/log/jumphost/` (ssh/, rdp/, rdp_proxy.log)  
-**Database:** PostgreSQL on localhost:5432, database: jumphost
+### v1.9 - Distributed Architecture & TPROXY
+- Multi-gate deployment (DMZ, cloud, office)
+- Tower (control plane) + Gate (data plane) separation
+- TPROXY transparent proxy mode
+- Local caching for offline resilience
+
+### v2.0 - CLI & Automation
+- Full curl-based CLI tool
+- Token-based API authentication
+- Bash completion
+- Webhook notifications (Slack, Teams)
+- FreeIPA/LDAP integration
+
+---
+
+## 📊 Monitoring & Operations
+
+### Health Check
+
+\`\`\`bash
+# Check all services
+systemctl status portcullis-*
+
+# View logs
+journalctl -u portcullis-ssh-proxy -f
+tail -f /var/log/portcullis/ssh_proxy.log
+\`\`\`
+
+### Metrics
+
+Web dashboard shows:
+- Active sessions count
+- Connections per hour (chart)
+- Top users by activity
+- Denied attempts
+- Policy expiration warnings
+
+### Maintenance
+
+\`\`\`bash
+# Backup database
+pg_dump portcullis > backup.sql
+
+# View session recordings
+ls /var/recordings/portcullis/ssh/
+ls /var/recordings/portcullis/rdp/
+
+# Clean old recordings (>90 days)
+find /var/recordings/ -mtime +90 -delete
+\`\`\`
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Areas we'd love help with:
+- FreeIPA/LDAP integration
+- Ansible playbooks for deployment
+- Terraform modules
+- Kubernetes Helm charts
+- Additional authentication methods
 
 ---
 
@@ -454,13 +560,27 @@ MIT License - See LICENSE file for details.
 
 ---
 
-## 🏆 Credits
+## 🎯 TL;DR
 
-**Development:** Open Source Project  
-**Testing:** Production validation with real-world scenarios  
-**Lines of Code:** ~3500 Python, ~500 SQL  
-**External Dependencies:** Paramiko, PyRDP, SQLAlchemy, PostgreSQL
+**Portcullis = Security gateway that:**
+- Sits between users and servers
+- Enforces temporary access policies
+- Records every session
+- Shows everything in web UI
+- Works with normal SSH/RDP clients
+
+**One command to grant access:**
+\`\`\`bash
+portcullis grant alice --server prod-db --duration 8h
+\`\`\`
+
+**One place to see everything:**
+\`\`\`
+http://gateway:5000
+\`\`\`
+
+That's it. Simple concept, powerful execution. 🏰
 
 ---
 
-*Built with ❤️ for enterprise security and compliance*
+*Built for security teams who value simplicity and auditability.*
