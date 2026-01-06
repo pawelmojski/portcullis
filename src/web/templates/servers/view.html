@@ -63,11 +63,11 @@
                     </tr>
                     <tr>
                         <th>Created:</th>
-                        <td>{{ server.created_at|datetime }}</td>
+                        <td>{{ server.created_at|localtime }}</td>
                     </tr>
                     <tr>
                         <th>Updated:</th>
-                        <td>{{ server.updated_at|datetime }}</td>
+                        <td>{{ server.updated_at|localtime }}</td>
                     </tr>
                 </table>
             </div>
@@ -91,7 +91,7 @@
                             </tr>
                             <tr>
                                 <th>Allocated At:</th>
-                                <td>{{ allocation.allocated_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                                <td>{{ allocation.allocated_at|localtime }}</td>
                             </tr>
                             <tr>
                                 <th>Type:</th>

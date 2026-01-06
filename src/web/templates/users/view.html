@@ -47,11 +47,11 @@
                     </tr>
                     <tr>
                         <th>Created:</th>
-                        <td>{{ user.created_at|datetime }}</td>
+                        <td>{{ user.created_at|localtime }}</td>
                     </tr>
                     <tr>
                         <th>Updated:</th>
-                        <td>{{ user.updated_at|datetime }}</td>
+                        <td>{{ user.updated_at|localtime }}</td>
                     </tr>
                 </table>
             </div>
@@ -165,8 +165,8 @@
                                         <span class="text-muted">All</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ policy.start_time|datetime }}</td>
-                                <td>{{ policy.end_time|datetime if policy.end_time else 'Never' }}</td>
+                                <td>{{ policy.start_time|localtime }}</td>
+                                <td>{{ policy.end_time|localtime if policy.end_time else 'Never' }}</td>
                                 <td>
                                     {% if policy.is_active %}
                                         <span class="badge badge-active">Active</span>

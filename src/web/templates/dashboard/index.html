@@ -147,7 +147,7 @@
                         </thead>
                         <tbody id="activeSessionsBody">
                             {% for session in active_sessions[:5] %}
-                            <tr>
+                            <tr style="cursor: pointer;" onclick="window.location='{{ url_for('sessions.view', session_id=session.session_id) }}'">
                                 <td><span class="badge bg-{{ 'primary' if session.protocol == 'SSH' else 'success' }}">{{ session.protocol }}</span></td>
                                 <td>{{ session.user }}</td>
                                 <td><strong>{{ session.server }}</strong></td>
@@ -165,22 +165,12 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <span title="{{ session.started.strftime('%d-%m-%Y %H:%M:%S') }}">
+                                    <span title="{{ session.started|localtime }}">
                                         {{ session.started|timeago }}
                                     </span>
                                 </td>
                                 <td>
                                     <span class="badge bg-warning text-dark">LIVE</span>
-                                </td>
-                                <td>
-                                    <a href="{{ url_for('sessions.view', session_id=session.id) }}" class="btn btn-sm btn-outline-primary" title="View Details">
-                                        <i class="bi bi-eye"></i>
-                                    </a>
-                                    {% if session.protocol == 'SSH' %}
-                                        <a href="{{ url_for('sessions.view', session_id=session.id) }}#live" class="btn btn-sm btn-outline-success" title="Live View">
-                                            <i class="bi bi-broadcast"></i>
-                                        </a>
-                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -213,34 +203,24 @@
                                 <th>Started</th>
                                 <th>Duration</th>
                                 <th>Ended</th>
-                                <th>Recording</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for session in recent_sessions[:10] %}
-                            <tr>
+                            <tr style="cursor: pointer;" onclick="window.location='{{ url_for('sessions.view', session_id=session.session_id) }}'">
                                 <td><span class="badge bg-{{ 'primary' if session.protocol == 'SSH' else 'success' }}">{{ session.protocol }}</span></td>
                                 <td>{{ session.user }}</td>
                                 <td><strong>{{ session.server }}</strong></td>
                                 <td>
-                                    <span title="{{ session.started.strftime('%d-%m-%Y %H:%M:%S') if session.started else '' }}">
+                                    <span title="{{ session.started|localtime if session.started else '' }}">
                                         {{ session.started|timeago if session.started else '-' }}
                                     </span>
                                 </td>
                                 <td>{{ session.duration }}</td>
                                 <td>
-                                    <span title="{{ session.ended.strftime('%d-%m-%Y %H:%M:%S') if session.ended else '' }}">
+                                    <span title="{{ session.ended|localtime if session.ended else '' }}">
                                         {{ session.ended|timeago if session.ended else '-' }}
                                     </span>
-                                </td>
-                                <td class="text-center">
-                                    {% if session.has_recording %}
-                                        <a href="{{ url_for('sessions.view', session_id=session.session_id) }}" class="btn btn-sm btn-outline-primary" title="View Details">
-                                            <i class="bi bi-eye"></i>
-                                        </a>
-                                    {% else %}
-                                        <span class="text-muted">-</span>
-                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -342,7 +322,7 @@
                                 </p>
                             </div>
                             <small class="text-muted">
-                                <span title="{{ log.timestamp.strftime('%d-%m-%Y %H:%M:%S') if log.timestamp else '' }}">
+                                <span title="{{ log.timestamp|localtime if log.timestamp else '' }}">
                                     {{ log.timestamp|timeago }}
                                 </span>
                             </small>
@@ -451,7 +431,7 @@ function refreshDashboard() {
                 const startedTitle = startedDate ? startedDate.toLocaleString() : '';
                 
                 html += `
-                    <tr>
+                    <tr style="cursor: pointer;" onclick="window.location='/sessions/${session.session_id}'">
                         <td><span class="badge bg-${protocolBadge}">${session.protocol}</span></td>
                         <td>${session.user}</td>
                         <td><strong>${session.server}</strong></td>
@@ -460,16 +440,6 @@ function refreshDashboard() {
                         <td class="text-center">${sshAgentIcon}</td>
                         <td><span title="${startedTitle}">${startedDisplay}</span></td>
                         <td><span class="badge bg-warning text-dark">LIVE</span></td>
-                        <td>
-                            <a href="/sessions/${session.id}" class="btn btn-sm btn-outline-primary" title="View Details">
-                                <i class="bi bi-eye"></i>
-                            </a>
-                            ${session.protocol === 'SSH' ? `
-                            <a href="/sessions/${session.id}#live" class="btn btn-sm btn-outline-success" title="Live View">
-                                <i class="bi bi-broadcast"></i>
-                            </a>
-                            ` : ''}
-                        </td>
                     </tr>
                 `;
             });

@@ -37,12 +37,12 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <label for="show_inactive" class="form-label">&nbsp;</label>
+                <label for="show_expired" class="form-label">&nbsp;</label>
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="show_inactive" name="show_inactive" value="true"
-                           {{ 'checked' if show_inactive }}>
-                    <label class="form-check-label" for="show_inactive">
-                        Show inactive/expired
+                    <input class="form-check-input" type="checkbox" id="show_expired" name="show_expired" value="true"
+                           {{ 'checked' if show_expired }}>
+                    <label class="form-check-label" for="show_expired">
+                        Show expired grants
                     </label>
                 </div>
             </div>
@@ -128,45 +128,39 @@
                                 <span class="text-muted">All</span>
                             {% endif %}
                         </td>
-                        <td>{{ policy.start_time.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>{{ policy.start_time|localtime if policy.start_time else 'Now' }}</td>
                         <td>
                             {% if policy.end_time %}
-                                {{ policy.end_time.strftime('%Y-%m-%d %H:%M') }}
+                                {{ policy.end_time|localtime }}
                             {% else %}
                                 <span class="text-muted">Never</span>
                             {% endif %}
                         </td>
                         <td>
-                            {% if policy.is_active %}
-                                <span class="badge badge-active">Active</span>
+                            {% if not policy.is_active %}
+                                <span class="badge bg-secondary">Disabled</span>
+                            {% elif policy.start_time and policy.start_time > now %}
+                                <span class="badge bg-info">Scheduled</span>
+                            {% elif policy.end_time and policy.end_time <= now %}
+                                <span class="badge bg-danger">Expired</span>
                             {% else %}
-                                <span class="badge badge-expired">Revoked/Expired</span>
+                                <span class="badge bg-success">Active</span>
                             {% endif %}
                         </td>
                         <td>
-                            {% if policy.is_active %}
                             <form method="POST" action="{{ url_for('policies.renew', policy_id=policy.id) }}" 
                                   style="display: inline;">
                                 <input type="hidden" name="days" value="30">
-                                <button type="submit" class="btn btn-sm btn-success" title="Renew for 30 days">
+                                <button type="submit" class="btn btn-sm btn-success" title="Extend for 30 days">
                                     <i class="bi bi-arrow-clockwise"></i> Renew
                                 </button>
                             </form>
                             <form method="POST" action="{{ url_for('policies.revoke', policy_id=policy.id) }}" 
-                                  style="display: inline;" onsubmit="return confirmDelete('revoke this policy');">
-                                <button type="submit" class="btn btn-sm btn-warning" title="Revoke">
+                                  style="display: inline;" onsubmit="return confirm('Revoke this policy? Access will expire immediately.');">
+                                <button type="submit" class="btn btn-sm btn-warning" title="Revoke (expire now)">
                                     <i class="bi bi-x-circle"></i> Revoke
                                 </button>
                             </form>
-                            {% else %}
-                            <form method="POST" action="{{ url_for('policies.renew', policy_id=policy.id) }}" 
-                                  style="display: inline;">
-                                <input type="hidden" name="days" value="30">
-                                <button type="submit" class="btn btn-sm btn-info" title="Reactivate for 30 days">
-                                    <i class="bi bi-arrow-clockwise"></i> Reactivate
-                                </button>
-                            </form>
-                            {% endif %}
                             <form method="POST" action="{{ url_for('policies.delete', policy_id=policy.id) }}" 
                                   style="display: inline;" onsubmit="return confirmDelete('delete this policy');">
                                 <button type="submit" class="btn btn-sm btn-danger" title="Delete">

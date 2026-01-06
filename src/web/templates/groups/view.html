@@ -41,11 +41,11 @@
                     </tr>
                     <tr>
                         <th>Created:</th>
-                        <td>{{ group.created_at|datetime }}</td>
+                        <td>{{ group.created_at|localtime }}</td>
                     </tr>
                     <tr>
                         <th>Updated:</th>
-                        <td>{{ group.updated_at|datetime }}</td>
+                        <td>{{ group.updated_at|localtime }}</td>
                     </tr>
                 </table>
             </div>

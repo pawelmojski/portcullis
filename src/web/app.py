@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_login import LoginManager, login_required, current_user
+import pytz
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -66,6 +67,19 @@ def format_datetime(value):
         return ''
     return value.strftime('%Y-%m-%d %H:%M:%S')
 
+@app.template_filter('localtime')
+def format_localtime(value):
+    """Convert UTC datetime to Europe/Warsaw timezone for display"""
+    if value is None:
+        return ''
+    warsaw_tz = pytz.timezone('Europe/Warsaw')
+    # If naive datetime, assume it's UTC
+    if value.tzinfo is None:
+        value = pytz.utc.localize(value)
+    # Convert to Warsaw time
+    local_time = value.astimezone(warsaw_tz)
+    return local_time.strftime('%Y-%m-%d %H:%M:%S %Z')
+
 @app.template_filter('date')
 def format_date(value):
     """Format date for display"""
@@ -96,6 +110,17 @@ def format_timeago(value):
     else:
         days = int(seconds / 86400)
         return f'{days}d ago'
+
+@app.template_filter('highlight_esc')
+def highlight_escape_sequences(value):
+    """Highlight escape sequences in HTML"""
+    if value is None:
+        return ''
+    import re
+    from markupsafe import Markup
+    # Highlight <ESC>, <NUL>, <BEL>, <BS>, <DEL> tags
+    value = re.sub(r'&lt;(ESC|NUL|BEL|BS|DEL)&gt;', r'<span class="esc-tag">&lt;\1&gt;</span>', value)
+    return Markup(value)
 
 # Context processor for global template variables
 @app.context_processor

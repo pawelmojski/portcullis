@@ -384,6 +384,45 @@ class MP4ConversionQueue(Base):
     )
 
 
+class SessionTransfer(Base):
+    """File transfers and port forwarding details for SSH sessions."""
+    __tablename__ = "session_transfers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Transfer type: 'scp_upload', 'scp_download', 'sftp_upload', 'sftp_download', 
+    #                'port_forward_local', 'port_forward_remote', 'socks_connection'
+    transfer_type = Column(String(30), nullable=False, index=True)
+    
+    # For file transfers (SCP/SFTP)
+    file_path = Column(Text)  # Remote file path
+    file_size = Column(BigInteger)  # Size in bytes
+    
+    # For port forwarding / SOCKS
+    local_addr = Column(String(45))  # Local address
+    local_port = Column(Integer)  # Local port
+    remote_addr = Column(String(255))  # Remote/destination address
+    remote_port = Column(Integer)  # Remote/destination port
+    bytes_sent = Column(BigInteger, default=0)  # Bytes sent through tunnel
+    bytes_received = Column(BigInteger, default=0)  # Bytes received through tunnel
+    
+    # Timing
+    started_at = Column(DateTime, default=datetime.utcnow, index=True)
+    ended_at = Column(DateTime)
+    
+    # Relationships
+    session = relationship("Session")
+    
+    __table_args__ = (
+        CheckConstraint(
+            "transfer_type IN ('scp_upload', 'scp_download', 'sftp_upload', 'sftp_download', "
+            "'port_forward_local', 'port_forward_remote', 'socks_connection')",
+            name="check_transfer_type_valid"
+        ),
+    )
+
+
 def get_all_user_groups(user_id, db):
     """
     Get all user groups recursively (including parent groups).

@@ -113,6 +113,95 @@ def parse_ssh_recording_internal(file_path):
     if not os.path.exists(file_path):
         return None
     
+    def ansi_to_html(text):
+        """Convert ANSI escape sequences to HTML with colors"""
+        import re
+        
+        # First, remove non-SGR escape sequences (they don't affect display)
+        # Remove CSI sequences (except SGR): ESC [ ... (not ending in 'm')
+        text = re.sub(r'\x1b\[[0-9;?]*[A-Zac-ln-z]', '', text)
+        # Remove OSC sequences: ESC ] ... BEL or ESC ] ... ESC \
+        text = re.sub(r'\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)', '', text)
+        # Remove other escape sequences
+        text = re.sub(r'\x1b[()][AB012]', '', text)  # Character set selection
+        text = re.sub(r'\x1b[=>]', '', text)  # Keypad mode
+        
+        # ANSI color map (SGR parameters)
+        colors = {
+            '30': '#000000', '31': '#cd0000', '32': '#00cd00', '33': '#cdcd00',
+            '34': '#0000ee', '35': '#cd00cd', '36': '#00cdcd', '37': '#e5e5e5',
+            '90': '#7f7f7f', '91': '#ff0000', '92': '#00ff00', '93': '#ffff00',
+            '94': '#5c5cff', '95': '#ff00ff', '96': '#00ffff', '97': '#ffffff',
+        }
+        
+        bg_colors = {
+            '40': '#000000', '41': '#cd0000', '42': '#00cd00', '43': '#cdcd00',
+            '44': '#0000ee', '45': '#cd00cd', '46': '#00cdcd', '47': '#e5e5e5',
+            '100': '#7f7f7f', '101': '#ff0000', '102': '#00ff00', '103': '#ffff00',
+            '104': '#5c5cff', '105': '#ff00ff', '106': '#00ffff', '107': '#ffffff',
+        }
+        
+        # Current style state
+        current_fg = None
+        current_bg = None
+        bold = False
+        
+        result = []
+        open_span = False
+        
+        # Split by ESC sequences
+        parts = re.split(r'(\x1b\[[0-9;]*m)', text)
+        
+        for part in parts:
+            if part.startswith('\x1b[') and part.endswith('m'):
+                # Parse SGR sequence
+                codes = part[2:-1].split(';')
+                
+                for code in codes:
+                    if code == '' or code == '0':
+                        # Reset
+                        if open_span:
+                            result.append('</span>')
+                            open_span = False
+                        current_fg = None
+                        current_bg = None
+                        bold = False
+                    elif code == '1':
+                        bold = True
+                    elif code == '22':
+                        bold = False
+                    elif code in colors:
+                        current_fg = colors[code]
+                    elif code in bg_colors:
+                        current_bg = bg_colors[code]
+                
+                # Close previous span if any
+                if open_span:
+                    result.append('</span>')
+                    open_span = False
+                
+                # Open new span with current styles
+                if current_fg or current_bg or bold:
+                    styles = []
+                    if current_fg:
+                        styles.append(f'color: {current_fg}')
+                    if current_bg:
+                        styles.append(f'background-color: {current_bg}')
+                    if bold:
+                        styles.append('font-weight: bold')
+                    result.append(f'<span style="{"; ".join(styles)}">')
+                    open_span = True
+            else:
+                # Regular text - escape HTML but preserve structure
+                import html
+                result.append(html.escape(part))
+        
+        # Close any open span
+        if open_span:
+            result.append('</span>')
+        
+        return ''.join(result)
+    
     try:
         with open(file_path, 'r') as f:
             data = json.load(f)
@@ -142,6 +231,12 @@ def parse_ssh_recording_internal(file_path):
             event_type = event.get('type', 'unknown')
             content = event.get('data', '')
             
+            # Skip client_to_server events that don't contain newline/return
+            # (these are individual keystrokes that will be echoed by server anyway)
+            if event_type == 'client_to_server':
+                if '\n' not in content and '\r' not in content and len(content) < 2:
+                    continue  # Skip single character keystrokes
+            
             # Format elapsed time
             if elapsed_seconds < 60:
                 elapsed_str = f"{int(elapsed_seconds)}s"
@@ -157,9 +252,17 @@ def parse_ssh_recording_internal(file_path):
             # Clean up content - remove excessive whitespace and control chars for display
             display_content = content
             if event_type in ['server_to_client', 'client_to_server']:
-                # Show first 500 chars, clean up excessive newlines
-                display_content = content[:500]
-                if len(content) > 500:
+                # Truncate before conversion (to avoid huge HTML)
+                original_length = len(content)
+                truncated = False
+                if original_length > 2000:
+                    content = content[:2000]
+                    truncated = True
+                
+                # Convert ANSI escape sequences to HTML
+                display_content = ansi_to_html(content)
+                
+                if truncated:
                     display_content += '... (truncated)'
             
             entry = {
@@ -174,6 +277,23 @@ def parse_ssh_recording_internal(file_path):
             
             log_entries.append(entry)
         
+        # Group consecutive events of the same type within 100ms
+        grouped_entries = []
+        for entry in log_entries:
+            if entry['type'] in ['session_start', 'session_end']:
+                grouped_entries.append(entry)
+                continue
+            
+            # Try to merge with previous entry if same type and within 100ms
+            if (grouped_entries and 
+                grouped_entries[-1]['type'] == entry['type'] and
+                entry['elapsed_seconds'] - grouped_entries[-1]['elapsed_seconds'] < 0.1):
+                # Merge content
+                grouped_entries[-1]['content'] += entry['content']
+                grouped_entries[-1]['content_length'] += entry['content_length']
+            else:
+                grouped_entries.append(entry)
+        
         # Calculate total duration
         if end_time_str:
             end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
@@ -186,7 +306,7 @@ def parse_ssh_recording_internal(file_path):
             'session_end': end_time_str,
             'total_duration': f"{int(duration_seconds)}s",
             'total_events': len(events),
-            'log_entries': log_entries,
+            'log_entries': grouped_entries,
             'username': data.get('username', 'unknown'),
             'server_ip': data.get('server_ip', 'unknown')
         }

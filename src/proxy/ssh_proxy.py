@@ -14,6 +14,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 import paramiko
+import pytz
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -1481,11 +1482,15 @@ class SSHProxyServer:
                     else:
                         time_str = f"{remaining_seconds/3600:.1f} hours"
                     
+                    # Convert UTC to Europe/Warsaw for display
+                    warsaw_tz = pytz.timezone('Europe/Warsaw')
+                    grant_end_time_local = pytz.utc.localize(grant_end_time).astimezone(warsaw_tz)
+                    
                     welcome_msg = (
                         f"\r\n"
                         f"{'='*70}\r\n"
                         f"  Access Grant Information\r\n"
-                        f"  Your access expires at: {grant_end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC\r\n"
+                        f"  Your access expires at: {grant_end_time_local.strftime('%Y-%m-%d %H:%M:%S %Z')}\r\n"
                         f"  Time remaining: {time_str}\r\n"
                         f"  \r\n"
                         f"  You will receive warnings before your access expires.\r\n"

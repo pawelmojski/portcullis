@@ -16,16 +16,18 @@ def index():
     db = g.db
     
     # Filter parameters
-    show_inactive = request.args.get('show_inactive', 'false') == 'true'
+    show_expired = request.args.get('show_expired', 'false') == 'true'
     user_filter = request.args.get('user')
     group_filter = request.args.get('group')
     
-    query = db.query(AccessPolicy)
+    query = db.query(AccessPolicy).filter(AccessPolicy.is_active == True)
     
-    if not show_inactive:
+    if not show_expired:
         now = datetime.utcnow()
+        # Show only active policies: now >= start_time AND (end_time IS NULL OR end_time > now)
         query = query.filter(
-            AccessPolicy.is_active == True,
+            (AccessPolicy.start_time == None) | (AccessPolicy.start_time <= now)
+        ).filter(
             (AccessPolicy.end_time == None) | (AccessPolicy.end_time > now)
         )
     
@@ -40,8 +42,9 @@ def index():
     user_groups = db.query(UserGroup).order_by(UserGroup.name).all()
     
     return render_template('policies/index.html', policies=policies, users=users,
-                         user_groups=user_groups, show_inactive=show_inactive, 
-                         user_filter=user_filter, group_filter=group_filter)
+                         user_groups=user_groups, show_expired=show_expired, 
+                         user_filter=user_filter, group_filter=group_filter,
+                         now=datetime.utcnow())
 
 @policies_bp.route('/add', methods=['GET', 'POST'])
 @login_required
@@ -155,17 +158,18 @@ def add():
 @policies_bp.route('/revoke/<int:policy_id>', methods=['POST'])
 @login_required
 def revoke(policy_id):
-    """Revoke (deactivate) policy"""
+    """Revoke policy - set end_time to now (immediate expiry)"""
     db = g.db
     policy = db.query(AccessPolicy).filter(AccessPolicy.id == policy_id).first()
     if not policy:
         abort(404)
     
     try:
-        policy.is_active = False
+        # Set end_time to now - policy expires immediately
+        # Keep is_active=True (temporal expiry, not soft delete)
         policy.end_time = datetime.utcnow()
         db.commit()
-        flash('Policy revoked successfully!', 'success')
+        flash('Policy revoked successfully! Access expired immediately.', 'success')
     except Exception as e:
         db.rollback()
         flash(f'Error revoking policy: {str(e)}', 'danger')
@@ -183,21 +187,24 @@ def renew(policy_id):
     
     try:
         days = int(request.form.get('days', 30))
-        
-        # Reactivate if inactive
-        if not policy.is_active:
-            policy.is_active = True
+        now = datetime.utcnow()
         
         # Extend end_time
         if policy.end_time:
-            # If end_time exists, extend from that date
-            policy.end_time = policy.end_time + timedelta(days=days)
+            # If policy already expired, extend from now
+            if policy.end_time < now:
+                policy.end_time = now + timedelta(days=days)
+                flash(f'Policy reactivated and extended for {days} days from now!', 'success')
+            else:
+                # If still active, extend from current end_time
+                policy.end_time = policy.end_time + timedelta(days=days)
+                flash(f'Policy extended for {days} days!', 'success')
         else:
             # If NULL (permanent), set end_time from now
-            policy.end_time = datetime.utcnow() + timedelta(days=days)
+            policy.end_time = now + timedelta(days=days)
+            flash(f'Permanent policy converted to {days}-day grant!', 'success')
         
         db.commit()
-        flash(f'Policy renewed for {days} days!', 'success')
     except ValueError:
         db.rollback()
         flash('Invalid number of days', 'danger')

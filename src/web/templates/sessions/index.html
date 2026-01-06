@@ -88,7 +88,7 @@
                             </td>
                             <td><code>{{ session.source_ip }}</code></td>
                             <td><code>{{ session.backend_ip }}</code></td>
-                            <td>{{ session.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>{{ session.started_at|localtime }}</td>
                             <td>
                                 {% if session.duration_seconds %}
                                     {% set hours = (session.duration_seconds // 3600)|int %}

@@ -76,13 +76,13 @@
                     <table class="table table-sm">
                         <tr>
                             <th style="width: 40%;">Started:</th>
-                            <td>{{ session.started_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>{{ session.started_at|localtime }}</td>
                         </tr>
                         <tr>
                             <th>Ended:</th>
                             <td>
                                 {% if session.ended_at %}
-                                    {{ session.ended_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                                    {{ session.ended_at|localtime }}
                                 {% else %}
                                     <span class="badge bg-success">Active</span>
                                 {% endif %}
@@ -198,11 +198,11 @@
                             {% for entry in recording_data.log_entries %}
                             {% if entry.type not in ['session_start', 'session_end'] %}
                             <div class="log-entry log-{{ entry.type }}" data-timestamp="{{ entry.elapsed_seconds }}">
-                                <span class="log-time text-muted">[{{ entry.elapsed }}]</span>
+                                <span class="log-time">[{{ entry.elapsed }}]</span>
                                 <span class="log-type badge bg-{{ 'success' if entry.type == 'client_to_server' else 'info' if entry.type == 'server_to_client' else 'secondary' }}">
-                                    {{ entry.type.replace('_', ' ').title() }}
+                                    {% if entry.type == 'client_to_server' %}Client{% elif entry.type == 'server_to_client' %}Server{% else %}{{ entry.type.replace('_', ' ').title() }}{% endif %}
                                 </span>
-                                <span class="log-content">{{ entry.content }}</span>
+                                <span class="log-content">{{ entry.content|safe }}</span>
                                 {% if entry.content_length > 500 %}
                                 <small class="text-warning ms-2">({{ entry.content_length }} bytes total)</small>
                                 {% endif %}
@@ -418,9 +418,10 @@
 }
 
 .log-time {
-    color: #858585;
+    color: #ffffff;
     font-size: 11px;
     margin-right: 8px;
+    font-weight: 500;
 }
 
 .log-type {
@@ -432,6 +433,11 @@
     color: #d4d4d4;
     white-space: pre-wrap;
     word-break: break-all;
+}
+
+/* Escape sequence highlighting */
+.log-content::before {
+    content: '';
 }
 
 /* Search highlighting */
@@ -451,6 +457,12 @@
 
 .log-server_to_client {
     border-left-color: #17a2b8;
+}
+
+/* Escape sequence tag styling */
+.esc-tag {
+    color: #ff8c00;
+    font-weight: bold;
 }
 </style>
 
@@ -575,15 +587,20 @@ document.addEventListener('DOMContentLoaded', function() {
                             logEntry.className = `log-entry log-${entry.type} new-entry`;
                             logEntry.dataset.timestamp = entry.elapsed_seconds;
                             
-                            const typeLabel = entry.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            let typeLabel = entry.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
                             let badgeClass = 'secondary';
-                            if (entry.type === 'client_to_server') badgeClass = 'success';
-                            if (entry.type === 'server_to_client') badgeClass = 'info';
+                            if (entry.type === 'client_to_server') {
+                                badgeClass = 'success';
+                                typeLabel = 'Client';
+                            } else if (entry.type === 'server_to_client') {
+                                badgeClass = 'info';
+                                typeLabel = 'Server';
+                            }
                             
                             let contentHtml = `
-                                <span class="log-time text-muted">[${entry.elapsed}]</span>
+                                <span class="log-time">[${entry.elapsed}]</span>
                                 <span class="log-type badge bg-${badgeClass}">${typeLabel}</span>
-                                <span class="log-content">${escapeHtml(entry.content)}</span>
+                                <span class="log-content">${ansiToHtml(entry.content)}</span>
                             `;
                             
                             if (entry.content_length > 500) {
@@ -617,8 +634,109 @@ document.addEventListener('DOMContentLoaded', function() {
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
-            return div.innerHTML;
+            let escaped = div.innerHTML;
+            // Highlight escape sequences in orange
+            escaped = escaped.replace(/&lt;ESC&gt;/g, '<span style="color: #ff8c00; font-weight: bold;">&lt;ESC&gt;</span>');
+            escaped = escaped.replace(/&lt;(NUL|BEL|BS|DEL)&gt;/g, '<span style="color: #ff8c00; font-weight: bold;">&lt;$1&gt;</span>');
+            return escaped;
         }
+        
+        function ansiToHtml(text) {
+            // First, remove non-SGR escape sequences (they don't affect display)
+            // Remove CSI sequences (except SGR): ESC [ ... (not ending in 'm')
+            text = text.replace(/\x1b\[[0-9;?]*[A-Zac-ln-z]/g, '');
+            // Remove OSC sequences: ESC ] ... BEL or ESC ] ... ESC \
+            text = text.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
+            // Remove other escape sequences
+            text = text.replace(/\x1b[()][AB012]/g, '');  // Character set selection
+            text = text.replace(/\x1b[=>]/g, '');  // Keypad mode
+            
+            // ANSI color map
+            const colors = {
+                '30': '#000000', '31': '#cd0000', '32': '#00cd00', '33': '#cdcd00',
+                '34': '#0000ee', '35': '#cd00cd', '36': '#00cdcd', '37': '#e5e5e5',
+                '90': '#7f7f7f', '91': '#ff0000', '92': '#00ff00', '93': '#ffff00',
+                '94': '#5c5cff', '95': '#ff00ff', '96': '#00ffff', '97': '#ffffff',
+            };
+            
+            const bgColors = {
+                '40': '#000000', '41': '#cd0000', '42': '#00cd00', '43': '#cdcd00',
+                '44': '#0000ee', '45': '#cd00cd', '46': '#00cdcd', '47': '#e5e5e5',
+                '100': '#7f7f7f', '101': '#ff0000', '102': '#00ff00', '103': '#ffff00',
+                '104': '#5c5cff', '105': '#ff00ff', '106': '#00ffff', '107': '#ffffff',
+            };
+            
+            let currentFg = null;
+            let currentBg = null;
+            let bold = false;
+            let result = [];
+            let openSpan = false;
+            
+            // Split by ESC sequences
+            const parts = text.split(/(\x1b\[[0-9;]*m)/);
+            
+            for (let part of parts) {
+                if (part.match(/^\x1b\[[0-9;]*m$/)) {
+                    // Parse SGR sequence
+                    const codes = part.slice(2, -1).split(';');
+                    
+                    for (let code of codes) {
+                        if (code === '' || code === '0') {
+                            // Reset
+                            if (openSpan) {
+                                result.push('</span>');
+                                openSpan = false;
+                            }
+                            currentFg = null;
+                            currentBg = null;
+                            bold = false;
+                        } else if (code === '1') {
+                            bold = true;
+                        } else if (code === '22') {
+                            bold = false;
+                        } else if (colors[code]) {
+                            currentFg = colors[code];
+                        } else if (bgColors[code]) {
+                            currentBg = bgColors[code];
+                        }
+                    }
+                    
+                    // Close previous span
+                    if (openSpan) {
+                        result.push('</span>');
+                        openSpan = false;
+                    }
+                    
+                    // Open new span with current styles
+                    if (currentFg || currentBg || bold) {
+                        let styles = [];
+                        if (currentFg) styles.push(`color: ${currentFg}`);
+                        if (currentBg) styles.push(`background-color: ${currentBg}`);
+                        if (bold) styles.push('font-weight: bold');
+                        result.push(`<span style="${styles.join('; ')}">`);
+                        openSpan = true;
+                    }
+                } else {
+                    // Regular text - escape HTML
+                    const div = document.createElement('div');
+                    div.textContent = part;
+                    result.push(div.innerHTML);
+                }
+            }
+            
+            // Close any open span
+            if (openSpan) {
+                result.push('</span>');
+            }
+            
+            return result.join('');
+        }
+        
+        // Auto-start live view for active sessions
+        {% if is_active %}
+        console.log('Session is active - auto-starting live view');
+        toggleLiveBtn.click();
+        {% endif %}
     }
     
     // ============================================
