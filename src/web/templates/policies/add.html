@@ -135,17 +135,56 @@
                     
                     <h5 class="mb-3">5. Time Configuration</h5>
                     
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="start_time" class="form-label">Start Time</label>
-                            <input type="datetime-local" class="form-control" id="start_time" name="start_time">
-                            <small class="form-text text-muted">Leave empty for immediate access</small>
+                    <div class="mb-3">
+                        <label for="start_time" class="form-label">Start Time</label>
+                        <input type="datetime-local" class="form-control" id="start_time" name="start_time">
+                        <small class="form-text text-muted">Leave empty for immediate access (now). Time is in UTC.</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Access Duration / End Time</label>
+                        <div class="btn-group w-100 mb-2" role="group">
+                            <input type="radio" class="btn-check" name="duration_type" id="duration_type_duration" value="duration" checked onchange="toggleDurationFields()">
+                            <label class="btn btn-outline-primary" for="duration_type_duration">
+                                <i class="bi bi-clock"></i> Duration
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="duration_type" id="duration_type_absolute" value="absolute" onchange="toggleDurationFields()">
+                            <label class="btn btn-outline-primary" for="duration_type_absolute">
+                                <i class="bi bi-calendar"></i> Specific Date/Time
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="duration_type" id="duration_type_permanent" value="permanent" onchange="toggleDurationFields()">
+                            <label class="btn btn-outline-primary" for="duration_type_permanent">
+                                <i class="bi bi-infinity"></i> Permanent
+                            </label>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="duration_hours" class="form-label">Duration (hours)</label>
-                            <input type="number" class="form-control" id="duration_hours" name="duration_hours" 
-                                   min="0" value="1" placeholder="1">
-                            <small class="form-text text-muted">Default: 1 hour. Set to 0 for permanent access</small>
+                        
+                        <div id="durationField">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="duration_hours" class="form-label">Hours</label>
+                                    <input type="number" class="form-control" id="duration_hours" name="duration_hours" 
+                                           min="0" max="8760" value="0" placeholder="0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="duration_minutes" class="form-label">Minutes</label>
+                                    <input type="number" class="form-control" id="duration_minutes" name="duration_minutes" 
+                                           min="0" max="59" value="0" placeholder="0">
+                                </div>
+                            </div>
+                            <small class="form-text text-muted">Grant will expire after specified duration from start time. Leave both at 0 for permanent access.</small>
+                        </div>
+                        
+                        <div id="absoluteField" style="display: none;">
+                            <input type="datetime-local" class="form-control" id="end_time" name="end_time">
+                            <small class="form-text text-muted">Grant will expire at specified date/time (UTC)</small>
+                        </div>
+                        
+                        <div id="permanentField" style="display: none;">
+                            <div class="alert alert-warning mb-0">
+                                <i class="bi bi-exclamation-triangle"></i> This grant will never expire automatically
+                            </div>
                         </div>
                     </div>
                     
@@ -204,6 +243,17 @@ function toggleScopeFields() {
     if (scopeType !== 'group') document.getElementById('target_group_id').value = '';
     if (scopeType !== 'server' && scopeType !== 'service') document.getElementById('target_server_id').value = '';
     if (scopeType !== 'service') document.getElementById('protocol').value = '';
+}
+
+function toggleDurationFields() {
+    const durationType = document.querySelector('input[name="duration_type"]:checked').value;
+    const durationField = document.getElementById('durationField');
+    const absoluteField = document.getElementById('absoluteField');
+    const permanentField = document.getElementById('permanentField');
+    
+    durationField.style.display = durationType === 'duration' ? 'block' : 'none';
+    absoluteField.style.display = durationType === 'absolute' ? 'block' : 'none';
+    permanentField.style.display = durationType === 'permanent' ? 'block' : 'none';
 }
 
 function loadUserIPs() {

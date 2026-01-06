@@ -10,6 +10,7 @@ import socket
 import select
 import threading
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 import paramiko
@@ -115,6 +116,7 @@ class SSHProxyHandler(paramiko.ServerInterface):
         self.access_control = AccessControl()
         self.authenticated_user = None
         self.target_server = None
+        self.matching_policies = []  # Policies that granted access
         self.client_password = None
         self.client_key = None
         self.agent_channel = None  # For agent forwarding
@@ -156,6 +158,7 @@ class SSHProxyHandler(paramiko.ServerInterface):
         # All checks passed
         self.target_server = result['server']
         self.authenticated_user = result['user']
+        self.matching_policies = result.get('policies', [])
         self.ssh_login = username  # SSH login for backend (e.g., "ideo")
         self.client_password = password
         
@@ -201,6 +204,7 @@ class SSHProxyHandler(paramiko.ServerInterface):
         # Store authentication info
         self.target_server = result['server']
         self.authenticated_user = result['user']
+        self.matching_policies = result.get('policies', [])
         self.ssh_login = username  # SSH login for backend (e.g., "ideo")
         self.client_key = key
         
@@ -1116,6 +1120,119 @@ class SSHProxyServer:
         except Exception as e:
             logger.error(f"Reverse forward listener error: {e}", exc_info=True)
     
+    def monitor_grant_expiry(self, channel, backend_channel, transport, backend_transport, 
+                             grant_end_time, db_session_id, session_id):
+        """Monitor grant expiry and send warnings, then disconnect when grant expires."""
+        try:
+            now = datetime.utcnow()
+            remaining = (grant_end_time - now).total_seconds()
+            
+            logger.info(f"Session {session_id}: Grant expires in {remaining/60:.1f} minutes ({grant_end_time})")
+            
+            # Warning times (in seconds before expiry)
+            warnings = [
+                (300, "5 minutes"),  # 5 minutes
+                (60, "1 minute"),    # 1 minute
+            ]
+            
+            for warning_seconds, warning_text in warnings:
+                if remaining > warning_seconds:
+                    # Sleep until warning time
+                    sleep_time = remaining - warning_seconds
+                    logger.debug(f"Session {session_id}: Sleeping {sleep_time:.0f}s until {warning_text} warning")
+                    time.sleep(sleep_time)
+                    
+                    # Check if session is still active
+                    if not transport.is_active() or not backend_transport.is_active():
+                        logger.info(f"Session {session_id}: Already disconnected before {warning_text} warning")
+                        return
+                    
+                    # Send wall-style warning
+                    now = datetime.utcnow()
+                    remaining = (grant_end_time - now).total_seconds()
+                    if remaining > 0:
+                        message = (
+                            f"\r\n\r\n"
+                            f"{'='*70}\r\n"
+                            f"  *** WARNING: Your access grant expires in {warning_text} ***\r\n"
+                            f"  Your session will be automatically disconnected at {grant_end_time} UTC\r\n"
+                            f"{'='*70}\r\n\r\n"
+                        )
+                        try:
+                            channel.send(message.encode())
+                            logger.info(f"Session {session_id}: Sent {warning_text} warning")
+                        except Exception as e:
+                            logger.error(f"Session {session_id}: Failed to send warning: {e}")
+                            return
+                    
+                    remaining = (grant_end_time - now).total_seconds()
+            
+            # Sleep until expiry
+            if remaining > 0:
+                logger.debug(f"Session {session_id}: Sleeping {remaining:.0f}s until grant expiry")
+                time.sleep(remaining)
+            
+            # Check if session is still active
+            if not transport.is_active() or not backend_transport.is_active():
+                logger.info(f"Session {session_id}: Already disconnected before grant expiry")
+                return
+            
+            # Send final disconnection message
+            final_message = (
+                f"\r\n\r\n"
+                f"{'='*70}\r\n"
+                f"  *** Your access grant has expired ***\r\n"
+                f"  Disconnecting now...\r\n"
+                f"{'='*70}\r\n\r\n"
+            )
+            try:
+                channel.send(final_message.encode())
+                time.sleep(1)  # Give time for message to be sent
+            except:
+                pass
+            
+            logger.info(f"Session {session_id}: Grant expired, closing connection")
+            
+            # Close channels and transports
+            try:
+                backend_channel.close()
+            except:
+                pass
+            
+            try:
+                channel.close()
+            except:
+                pass
+            
+            try:
+                backend_transport.close()
+            except:
+                pass
+            
+            try:
+                transport.close()
+            except:
+                pass
+            
+            # Update database session
+            db = SessionLocal()
+            try:
+                db_sess = db.query(DBSession).filter(DBSession.id == db_session_id).first()
+                if db_sess and db_sess.is_active:
+                    db_sess.ended_at = datetime.utcnow()
+                    db_sess.is_active = False
+                    db_sess.duration_seconds = int((db_sess.ended_at - db_sess.started_at).total_seconds())
+                    db_sess.termination_reason = 'grant_expired'
+                    db.commit()
+                    logger.info(f"Session {session_id}: Updated database with termination_reason='grant_expired'")
+            except Exception as e:
+                logger.error(f"Session {session_id}: Failed to update database: {e}")
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"Session {session_id}: Error in grant expiry monitor: {e}", exc_info=True)
+    
     def handle_client(self, client_socket, client_addr):
         """Handle incoming client connection"""
         source_ip = client_addr[0]
@@ -1343,6 +1460,54 @@ class SSHProxyServer:
                 backend_display += f":{subsys}"
             write_utmp_login(session_id, user.username, tty_name, source_ip, backend_display)
             logger.info(f"Session {session_id} registered in utmp as {tty_name}")
+            
+            # Check grant expiry for interactive shell sessions
+            grant_end_time = None
+            if server_handler.channel_type == 'shell' and server_handler.matching_policies:
+                # Get earliest expiry time from policies that granted access
+                end_times = [p.end_time for p in server_handler.matching_policies if p.end_time]
+                if end_times:
+                    grant_end_time = min(end_times)
+                    logger.info(f"Session {session_id}: Grant expires at {grant_end_time}")
+                    
+                    # Send welcome message
+                    now = datetime.utcnow()
+                    remaining = grant_end_time - now
+                    remaining_seconds = remaining.total_seconds()
+                    
+                    # Format time remaining - show minutes if < 1 hour, else show hours
+                    if remaining_seconds < 3600:
+                        time_str = f"{remaining_seconds/60:.1f} minutes"
+                    else:
+                        time_str = f"{remaining_seconds/3600:.1f} hours"
+                    
+                    welcome_msg = (
+                        f"\r\n"
+                        f"{'='*70}\r\n"
+                        f"  Access Grant Information\r\n"
+                        f"  Your access expires at: {grant_end_time.strftime('%Y-%m-%d %H:%M:%S')} UTC\r\n"
+                        f"  Time remaining: {time_str}\r\n"
+                        f"  \r\n"
+                        f"  You will receive warnings before your access expires.\r\n"
+                        f"  Your session will be automatically disconnected at expiry time.\r\n"
+                        f"{'='*70}\r\n\r\n"
+                    )
+                    
+                    try:
+                        channel.send(welcome_msg.encode())
+                        logger.info(f"Session {session_id}: Sent grant expiry welcome message")
+                    except Exception as e:
+                        logger.error(f"Session {session_id}: Failed to send welcome message: {e}")
+                    
+                    # Start grant expiry monitor thread
+                    monitor_thread = threading.Thread(
+                        target=self.monitor_grant_expiry,
+                        args=(channel, backend_channel, transport, backend_transport, 
+                              grant_end_time, db_session.id, session_id),
+                        daemon=True
+                    )
+                    monitor_thread.start()
+                    logger.info(f"Session {session_id}: Started grant expiry monitor thread")
             
             # Forward traffic
             self.forward_channel(channel, backend_channel, recorder)

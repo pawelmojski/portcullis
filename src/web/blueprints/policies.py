@@ -23,7 +23,7 @@ def index():
     query = db.query(AccessPolicy)
     
     if not show_inactive:
-        now = datetime.now()
+        now = datetime.utcnow()
         query = query.filter(
             AccessPolicy.is_active == True,
             (AccessPolicy.end_time == None) | (AccessPolicy.end_time > now)
@@ -57,7 +57,6 @@ def add():
             user_group_id = request.form.get('user_group_id')
             scope_type = request.form['scope_type']
             protocol = request.form.get('protocol') or None
-            duration_hours = request.form.get('duration_hours')
             source_ip_id = request.form.get('source_ip_id')
             port_forwarding_allowed = request.form.get('port_forwarding_allowed') == 'on'
             
@@ -69,10 +68,38 @@ def add():
                 flash('User group is required', 'danger')
                 return redirect(url_for('policies.add'))
             
-            # Calculate end time (0 = permanent, >0 = hours)
+            # Parse start_time (optional, default to now)
+            start_time_str = request.form.get('start_time')
+            if start_time_str:
+                # Parse HTML5 datetime-local format (YYYY-MM-DDTHH:MM)
+                start_time = datetime.strptime(start_time_str, '%Y-%m-%dT%H:%M')
+            else:
+                start_time = datetime.utcnow()
+            
+            # Calculate end_time based on duration_type
+            duration_type = request.form.get('duration_type', 'duration')
             end_time = None
-            if duration_hours and int(duration_hours) > 0:
-                end_time = datetime.now() + timedelta(hours=int(duration_hours))
+            
+            if duration_type == 'duration':
+                # Duration in hours and minutes
+                duration_hours = int(request.form.get('duration_hours', 0))
+                duration_minutes = int(request.form.get('duration_minutes', 0))
+                total_minutes = duration_hours * 60 + duration_minutes
+                
+                if total_minutes > 0:
+                    end_time = start_time + timedelta(minutes=total_minutes)
+                # else: permanent (end_time = None)
+                
+            elif duration_type == 'absolute':
+                # Specific end date/time
+                end_time_str = request.form.get('end_time')
+                if end_time_str:
+                    end_time = datetime.strptime(end_time_str, '%Y-%m-%dT%H:%M')
+                else:
+                    flash('End time is required when using absolute date/time', 'danger')
+                    return redirect(url_for('policies.add'))
+            
+            # duration_type == 'permanent': end_time remains None
             
             # Create policy
             policy = AccessPolicy(
@@ -83,6 +110,7 @@ def add():
                 protocol=protocol,
                 port_forwarding_allowed=port_forwarding_allowed,
                 is_active=True,
+                start_time=start_time,
                 end_time=end_time
             )
             
@@ -135,7 +163,7 @@ def revoke(policy_id):
     
     try:
         policy.is_active = False
-        policy.end_time = datetime.now()
+        policy.end_time = datetime.utcnow()
         db.commit()
         flash('Policy revoked successfully!', 'success')
     except Exception as e:
@@ -166,7 +194,7 @@ def renew(policy_id):
             policy.end_time = policy.end_time + timedelta(days=days)
         else:
             # If NULL (permanent), set end_time from now
-            policy.end_time = datetime.now() + timedelta(days=days)
+            policy.end_time = datetime.utcnow() + timedelta(days=days)
         
         db.commit()
         flash(f'Policy renewed for {days} days!', 'success')
