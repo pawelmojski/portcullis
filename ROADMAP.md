@@ -1,6 +1,6 @@
 # Jump Host Project - Roadmap & TODO
 
-## Current Status: v1.7 (Policy Audit Trail & Edit System) - January 2026 ✅
+## Current Status: v1.7.5 (Connection Attempts Logging) - January 2026 ✅
 
 **Operational Services:**
 - ✅ SSH Proxy: `0.0.0.0:22` (systemd: jumphost-ssh-proxy.service)
@@ -17,11 +17,13 @@
 - ✅ Policy Management: Renew/Reactivate with group filtering 🎯
 - ✅ Grant Expiry Auto-Disconnect: Warnings & auto-termination 🎯
 - ✅ Schedule-Based Access Control: Recurring time windows with timezone support 🎯
-- ✅ **Policy Audit Trail**: Full change history with JSONB snapshots 🎯 NEW v1.7
-- ✅ **Policy Editing**: Edit schedules without revoke/recreate 🎯 NEW v1.7
-- ✅ **Schedule Display**: Tooltips showing all time windows 🎯 NEW v1.7
+- ✅ Policy Audit Trail: Full change history with JSONB snapshots 🎯
+- ✅ Policy Editing: Edit schedules without revoke/recreate 🎯
+- ✅ Schedule Display: Tooltips showing all time windows 🎯
+- ✅ **Connection Tracking**: policy_id, denial_reason, protocol_version 🎯 NEW v1.7.5
 
 **Recent Milestones:**
+- v1.7.5: Connection Attempts Logging (January 2026) ✅ COMPLETED
 - v1.7: Policy Audit Trail & Edit System (January 2026) ✅ COMPLETED
 - v1.6: Schedule-Based Access Control (January 2026) ✅ COMPLETED
 - v1.5: Grant Expiry Auto-Disconnect with Warnings (January 2026) ✅ COMPLETED
