@@ -554,12 +554,6 @@ Contributions welcome! Areas we'd love help with:
 
 ---
 
-## 📄 License
-
-MIT License - See LICENSE file for details.
-
----
-
 ## 🎯 TL;DR
 
 **Portcullis = Security gateway that:**
