@@ -13,7 +13,7 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 - **Roadmap**: [ROADMAP.md](ROADMAP.md) - Development history and future plans
 - **Dependencies**: See [requirements.txt](requirements.txt) and [requirements-pyrdp-converter.txt](requirements-pyrdp-converter.txt)
 
-## Architecture (Current State - v1.3)
+## Architecture (Current State - v1.5)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -47,6 +47,8 @@ Self-made SSH/RDP jump host with temporal access control, source IP mapping, ses
 │  │  - Agent forwarding support (-A flag)                     │   │
 │  │  - Live session recording (JSONL) 🎯 NEW                │   │
 │  │  - Real-time session tracking 🎯                         │   │
+│  │  - Grant expiry auto-disconnect 🎯 NEW v1.5             │   │
+│  │  - Wall-style warnings (5 min, 1 min) 🎯 NEW v1.5      │   │
 │  │  - UTMP/WTMP logging (ssh0-ssh99)                        │   │
 │  │  - Backend: 10.0.160.4 (Linux SSH)                        │   │
 │  │  - Access Control V2: Policy-based authorization          │   │
@@ -531,6 +533,12 @@ policy.port_forwarding_allowed = True
   - [x] Per-policy permission control (`port_forwarding_allowed` flag)
   - [x] Cascaded -R architecture (jump pool IP → backend → client)
   - [x] Pool IP binding for multi-backend support
+- [x] **Grant Expiry Auto-Disconnect** 🎯 NEW (v1.5)
+  - [x] Automatic session termination when grant expires
+  - [x] Wall-style warnings (5 min, 1 min before expiry)
+  - [x] Welcome message showing grant validity
+  - [x] Only for interactive shell sessions (not SCP/SFTP)
+  - [x] Enhanced grant form (minutes, datetime pickers, UTC)
 
 ### RDP Proxy ✓
 - [x] PyRDP MITM with session recording and real-time tracking ⭐

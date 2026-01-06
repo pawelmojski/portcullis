@@ -1,6 +1,6 @@
 # Jump Host Project - Roadmap & TODO
 
-## Current Status: v1.4 (SSH Port Forwarding & Enhanced Policies) - January 2026 ✅
+## Current Status: v1.5 (Grant Expiry Auto-Disconnect) - January 2026 ✅
 
 **Operational Services:**
 - ✅ SSH Proxy: `0.0.0.0:22` (systemd: jumphost-ssh-proxy.service)
@@ -13,10 +13,12 @@
 - ✅ RDP MP4 Conversion: Background queue with progress tracking
 - ✅ Recursive User Groups: Hierarchical permissions with inheritance 🎯
 - ✅ Port Forwarding Control: Per-policy SSH forwarding permissions 🎯
-- ✅ SSH Port Forwarding: -L (local), -R (remote), -D (SOCKS) 🎯 NEW
-- ✅ Policy Management: Renew/Reactivate with group filtering 🎯 NEW
+- ✅ SSH Port Forwarding: -L (local), -R (remote), -D (SOCKS) 🎯
+- ✅ Policy Management: Renew/Reactivate with group filtering 🎯
+- ✅ Grant Expiry Auto-Disconnect: Warnings & auto-termination 🎯 NEW v1.5
 
 **Recent Milestones:**
+- v1.5: Grant Expiry Auto-Disconnect with Warnings (January 2026) ✅ COMPLETED
 - v1.4: SSH Port Forwarding & Policy Enhancements (January 2026) ✅ COMPLETED
 - v1.3: RDP MP4 Conversion System (January 2026) ✅ COMPLETED
 - v1.2-dev: RDP Session Viewer (January 2026) ✅ COMPLETED
