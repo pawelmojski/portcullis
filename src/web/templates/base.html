@@ -69,12 +69,28 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint and 'search' in request.endpoint %}active{% endif %}" 
+                           href="{{ url_for('search.search') }}">
+                            <i class="bi bi-search"></i> Search
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.endpoint and 'monitoring' in request.endpoint %}active{% endif %}" 
                            href="{{ url_for('monitoring.index') }}">
                             <i class="bi bi-activity"></i> Monitoring
                         </a>
                     </li>
                 </ul>
+                
+                <!-- Global Search -->
+                <form class="d-flex me-3" method="GET" action="{{ url_for('search.search') }}">
+                    <input class="form-control me-2" type="search" name="q" placeholder="Szukaj..." 
+                           aria-label="Search" style="width: 250px;">
+                    <button class="btn btn-outline-light" type="submit">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </form>
+                
                 <ul class="navbar-nav">
                     {% if current_user.is_authenticated %}
                     <li class="nav-item dropdown">

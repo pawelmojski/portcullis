@@ -110,7 +110,11 @@
                         <tr>
                             <th>Status:</th>
                             <td>
-                                {% if session.is_active %}
+                                {% if session.connection_status == 'denied' %}
+                                    <span class="badge bg-danger">
+                                        <i class="bi bi-x-circle"></i> Connection Denied
+                                    </span>
+                                {% elif session.is_active %}
                                     <span class="badge bg-success">Active</span>
                                 {% else %}
                                     <span class="badge bg-secondary">Closed</span>
@@ -120,6 +124,23 @@
                                 {% endif %}
                             </td>
                         </tr>
+                        {% if session.connection_status == 'denied' %}
+                        <tr>
+                            <th>Denial Reason:</th>
+                            <td>
+                                <span class="badge bg-warning text-dark">{{ session.denial_reason or 'access_denied' }}</span>
+                                {% if session.denial_details %}
+                                    <br><small class="text-muted">{{ session.denial_details }}</small>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% if session.protocol_version %}
+                        <tr>
+                            <th>Protocol Version:</th>
+                            <td><code>{{ session.protocol_version }}</code></td>
+                        </tr>
+                        {% endif %}
                         <tr>
                             <th>Recording:</th>
                             <td>

@@ -201,6 +201,43 @@ class SSHProxyHandler(paramiko.ServerInterface):
             
             if not result['has_access']:
                 logger.warning(f"No grant for {username} from {self.source_ip}: {result['reason']}")
+                
+                # Log denied session to database (v1.7.5)
+                try:
+                    import uuid
+                    session_id = str(uuid.uuid4())
+                    
+                    # Get user and server if available
+                    user = result.get('user')
+                    server = result.get('server')
+                    selected_policy = result.get('selected_policy')
+                    
+                    denied_session = DBSession(
+                        session_id=session_id,
+                        user_id=user.id if user else None,
+                        server_id=server.id if server else None,
+                        protocol='ssh',
+                        source_ip=self.source_ip,
+                        proxy_ip=self.dest_ip,
+                        backend_ip=server.ip_address if server else None,
+                        backend_port=22,
+                        ssh_username=username,
+                        started_at=datetime.utcnow(),
+                        ended_at=datetime.utcnow(),  # Denied immediately
+                        is_active=False,
+                        connection_status='denied',
+                        denial_reason=result.get('denial_reason', 'access_denied'),
+                        denial_details=result.get('reason', 'Access denied'),
+                        policy_id=selected_policy.id if selected_policy else None,
+                        protocol_version=None  # Could extract from transport later
+                    )
+                    self.db.add(denied_session)
+                    self.db.commit()
+                    logger.info(f"Denied session {session_id} logged to database (check_auth_none)")
+                except Exception as e:
+                    logger.error(f"Failed to log denied session: {e}")
+                    self.db.rollback()
+                
                 self.no_grant_reason = result.get('reason', 'No active grant found')
                 logger.info(f"check_auth_none: SET no_grant_reason='{self.no_grant_reason}'")
                 # Return FAILED - user will be disconnected after banner
@@ -237,6 +274,43 @@ class SSHProxyHandler(paramiko.ServerInterface):
         
         if not result['has_access']:
             logger.warning(f"Access denied for {username} from {self.source_ip}: {result['reason']}")
+            
+            # Log denied session to database (v1.7.5)
+            try:
+                import uuid
+                session_id = str(uuid.uuid4())
+                
+                # Get user and server if available
+                user = result.get('user')
+                server = result.get('server')
+                selected_policy = result.get('selected_policy')
+                
+                denied_session = DBSession(
+                    session_id=session_id,
+                    user_id=user.id if user else None,
+                    server_id=server.id if server else None,
+                    protocol='ssh',
+                    source_ip=self.source_ip,
+                    proxy_ip=self.dest_ip,
+                    backend_ip=server.ip_address if server else None,
+                    backend_port=22,
+                    ssh_username=username,
+                    started_at=datetime.utcnow(),
+                    ended_at=datetime.utcnow(),  # Denied immediately
+                    is_active=False,
+                    connection_status='denied',
+                    denial_reason=result.get('denial_reason', 'access_denied'),
+                    denial_details=result.get('reason', 'Access denied'),
+                    policy_id=selected_policy.id if selected_policy else None,
+                    protocol_version=None  # Could extract from transport later
+                )
+                self.db.add(denied_session)
+                self.db.commit()
+                logger.info(f"Denied session {session_id} logged to database")
+            except Exception as e:
+                logger.error(f"Failed to log denied session: {e}")
+                self.db.rollback()
+            
             # Store reason for banner
             self.no_grant_reason = result.get('reason', 'No active grant found for your IP address')
             return paramiko.AUTH_FAILED

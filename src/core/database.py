@@ -424,6 +424,7 @@ class Session(Base):
     user = relationship("User")
     server = relationship("Server")
     policy = relationship("AccessPolicy")
+    transfers = relationship("SessionTransfer", back_populates="session")
     
     __table_args__ = (
         CheckConstraint(
@@ -483,7 +484,7 @@ class SessionTransfer(Base):
     ended_at = Column(DateTime)
     
     # Relationships
-    session = relationship("Session")
+    session = relationship("Session", back_populates="transfers")
     
     __table_args__ = (
         CheckConstraint(

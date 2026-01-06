@@ -1,0 +1,636 @@
+{% extends "base.html" %}
+
+{% block title %}Search - Jumphost{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="fas fa-search"></i> Mega-Wyszukiwarka</h2>
+            <p class="text-muted">Szukaj w sesjach, politykach, port forwardingu, użytkownikach, serwerach i grupach</p>
+        </div>
+    </div>
+
+    <!-- Search Box -->
+    <div class="row mt-3">
+        <div class="col-12">
+            <form method="GET" action="{{ url_for('search.search') }}" id="searchForm">
+                <div class="input-group input-group-lg mb-3">
+                    <input type="text" class="form-control" name="q" value="{{ filters.q or '' }}" 
+                           placeholder="Szukaj: username, IP, #policy_id, protocol, hostname..." 
+                           autofocus>
+                    <button class="btn btn-primary" type="submit">
+                        <i class="fas fa-search"></i> Szukaj
+                    </button>
+                    <button class="btn btn-outline-secondary" type="button" data-bs-toggle="collapse" 
+                            data-bs-target="#advancedFilters">
+                        <i class="fas fa-sliders-h"></i> Filtry zaawansowane
+                    </button>
+                </div>
+
+                <!-- Quick Filters -->
+                <div class="btn-group mb-3" role="group">
+                    <input type="radio" class="btn-check" name="is_active" value="" id="all_status" 
+                           {% if not filters.is_active %}checked{% endif %}>
+                    <label class="btn btn-outline-primary" for="all_status">Wszystkie</label>
+                    
+                    <input type="radio" class="btn-check" name="is_active" value="yes" id="active_only"
+                           {% if filters.is_active == 'yes' %}checked{% endif %}>
+                    <label class="btn btn-outline-success" for="active_only">
+                        <i class="fas fa-circle text-success"></i> Tylko aktywne
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="is_active" value="no" id="closed_only"
+                           {% if filters.is_active == 'no' %}checked{% endif %}>
+                    <label class="btn btn-outline-secondary" for="closed_only">
+                        <i class="fas fa-circle text-secondary"></i> Tylko zamknięte
+                    </label>
+                </div>
+
+                <div class="btn-group mb-3 ms-2" role="group">
+                    <input type="radio" class="btn-check" name="connection_status" value="" id="all_conn_status"
+                           {% if not filters.connection_status %}checked{% endif %}>
+                    <label class="btn btn-outline-primary" for="all_conn_status">Wszystkie połączenia</label>
+                    
+                    <input type="radio" class="btn-check" name="connection_status" value="denied" id="denied_only"
+                           {% if filters.connection_status == 'denied' %}checked{% endif %}>
+                    <label class="btn btn-outline-danger" for="denied_only">
+                        <i class="fas fa-ban"></i> Tylko odrzucone
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="connection_status" value="active" id="granted_only"
+                           {% if filters.connection_status == 'active' %}checked{% endif %}>
+                    <label class="btn btn-outline-success" for="granted_only">
+                        <i class="fas fa-check"></i> Tylko przyznane
+                    </label>
+                </div>
+
+                <div class="btn-group mb-3 ms-2" role="group">
+                    <input type="radio" class="btn-check" name="has_port_forwarding" value="" id="all_pf"
+                           {% if not filters.has_port_forwarding %}checked{% endif %}>
+                    <label class="btn btn-outline-primary" for="all_pf">Port Forwarding (dowolne)</label>
+                    
+                    <input type="radio" class="btn-check" name="has_port_forwarding" value="yes" id="with_pf"
+                           {% if filters.has_port_forwarding == 'yes' %}checked{% endif %}>
+                    <label class="btn btn-outline-info" for="with_pf">
+                        <i class="fas fa-exchange-alt"></i> Z port forwarding
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="has_port_forwarding" value="no" id="without_pf"
+                           {% if filters.has_port_forwarding == 'no' %}checked{% endif %}>
+                    <label class="btn btn-outline-secondary" for="without_pf">Bez port forwarding</label>
+                </div>
+
+                <!-- Advanced Filters (Collapsible) -->
+                <div class="collapse {% if filters.user_id or filters.server_id or filters.protocol %}show{% endif %}" id="advancedFilters">
+                    <div class="card card-body bg-light">
+                        <div class="row g-3">
+                            <!-- User filter -->
+                            <div class="col-md-3">
+                                <label for="user_id" class="form-label">Użytkownik</label>
+                                <select name="user_id" id="user_id" class="form-select">
+                                    <option value="">-- Wszyscy --</option>
+                                    {% for user in all_users %}
+                                    <option value="{{ user.id }}" {% if filters.user_id == user.id %}selected{% endif %}>
+                                        {{ user.username }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- User group filter -->
+                            <div class="col-md-3">
+                                <label for="user_group_id" class="form-label">Grupa użytkowników</label>
+                                <select name="user_group_id" id="user_group_id" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    {% for group in all_user_groups %}
+                                    <option value="{{ group.id }}" {% if filters.user_group_id == group.id %}selected{% endif %}>
+                                        {{ group.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Server filter -->
+                            <div class="col-md-3">
+                                <label for="server_id" class="form-label">Serwer</label>
+                                <select name="server_id" id="server_id" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    {% for server in all_servers %}
+                                    <option value="{{ server.id }}" {% if filters.server_id == server.id %}selected{% endif %}>
+                                        {{ server.name }} ({{ server.ip_address }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Server group filter -->
+                            <div class="col-md-3">
+                                <label for="server_group_id" class="form-label">Grupa serwerów</label>
+                                <select name="server_group_id" id="server_group_id" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    {% for group in all_server_groups %}
+                                    <option value="{{ group.id }}" {% if filters.server_group_id == group.id %}selected{% endif %}>
+                                        {{ group.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Protocol filter -->
+                            <div class="col-md-3">
+                                <label for="protocol" class="form-label">Protokół</label>
+                                <select name="protocol" id="protocol" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    {% for proto in protocols %}
+                                    <option value="{{ proto }}" {% if filters.protocol == proto %}selected{% endif %}>
+                                        {{ proto|upper }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Policy filter -->
+                            <div class="col-md-3">
+                                <label for="policy_id" class="form-label">Polityka</label>
+                                <select name="policy_id" id="policy_id" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    {% for policy in all_policies %}
+                                    <option value="{{ policy.id }}" {% if filters.policy_id == policy.id %}selected{% endif %}>
+                                        #{{ policy.id }} - {{ policy.user.username if policy.user else policy.user_group.name }}
+                                        → {{ policy.target_server.name if policy.target_server else policy.target_group.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Denial reason filter -->
+                            <div class="col-md-3">
+                                <label for="denial_reason" class="form-label">Powód odrzucenia</label>
+                                <select name="denial_reason" id="denial_reason" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    {% for reason in denial_reasons %}
+                                    <option value="{{ reason }}" {% if filters.denial_reason == reason %}selected{% endif %}>
+                                        {{ reason }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Source IP filter -->
+                            <div class="col-md-3">
+                                <label for="source_ip" class="form-label">IP źródłowe</label>
+                                <input type="text" name="source_ip" id="source_ip" class="form-control" 
+                                       value="{{ filters.source_ip or '' }}" placeholder="10.0.0.1">
+                            </div>
+
+                            <!-- Time from -->
+                            <div class="col-md-3">
+                                <label for="time_from" class="form-label">Od (czas)</label>
+                                <input type="datetime-local" name="time_from" id="time_from" class="form-control"
+                                       value="{{ filters.time_from.strftime('%Y-%m-%dT%H:%M') if filters.time_from else '' }}">
+                            </div>
+
+                            <!-- Time to -->
+                            <div class="col-md-3">
+                                <label for="time_to" class="form-label">Do (czas)</label>
+                                <input type="datetime-local" name="time_to" id="time_to" class="form-control"
+                                       value="{{ filters.time_to.strftime('%Y-%m-%dT%H:%M') if filters.time_to else '' }}">
+                            </div>
+
+                            <!-- Min duration -->
+                            <div class="col-md-3">
+                                <label for="min_duration" class="form-label">Min. czas trwania (min)</label>
+                                <input type="number" name="min_duration" id="min_duration" class="form-control"
+                                       value="{{ filters.min_duration or '' }}" placeholder="5">
+                            </div>
+
+                            <!-- Max duration -->
+                            <div class="col-md-3">
+                                <label for="max_duration" class="form-label">Max. czas trwania (min)</label>
+                                <input type="number" name="max_duration" id="max_duration" class="form-control"
+                                       value="{{ filters.max_duration or '' }}" placeholder="60">
+                            </div>
+
+                            <!-- Scope type (for policies tab) -->
+                            <div class="col-md-3">
+                                <label for="scope_type" class="form-label">Typ polityki</label>
+                                <select name="scope_type" id="scope_type" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    <option value="direct" {% if filters.scope_type == 'direct' %}selected{% endif %}>Direct</option>
+                                    <option value="service" {% if filters.scope_type == 'service' %}selected{% endif %}>Service</option>
+                                    <option value="group" {% if filters.scope_type == 'group' %}selected{% endif %}>Group</option>
+                                </select>
+                            </div>
+
+                            <!-- Active policies only -->
+                            <div class="col-md-3">
+                                <label for="active_only" class="form-label">Tylko aktywne polityki</label>
+                                <select name="active_only" id="active_only" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    <option value="yes" {% if filters.active_only == 'yes' %}selected{% endif %}>Tak</option>
+                                </select>
+                            </div>
+
+                            <!-- Forwarding type -->
+                            <div class="col-md-3">
+                                <label for="forwarding_type" class="form-label">Typ port forwarding</label>
+                                <select name="forwarding_type" id="forwarding_type" class="form-select">
+                                    <option value="">-- Wszystkie --</option>
+                                    <option value="local" {% if filters.forwarding_type == 'local' %}selected{% endif %}>Local (-L)</option>
+                                    <option value="remote" {% if filters.forwarding_type == 'remote' %}selected{% endif %}>Remote (-R)</option>
+                                    <option value="dynamic" {% if filters.forwarding_type == 'dynamic' %}selected{% endif %}>Dynamic (-D)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-search"></i> Zastosuj filtry
+                                </button>
+                                <a href="{{ url_for('search.search') }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-times"></i> Wyczyść filtry
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Hidden field to preserve tab -->
+                <input type="hidden" name="tab" value="{{ tab }}">
+            </form>
+        </div>
+    </div>
+
+    <!-- Results Tabs -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted small">
+                    <i class="fas fa-sync-alt fa-spin" id="autoRefreshIcon"></i> Auto-refresh aktywny (co 2s)
+                </span>
+            </div>
+            
+            <ul class="nav nav-tabs" id="resultTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {% if tab == 'sessions' %}active{% endif %}" 
+                            onclick="switchTab('sessions')" type="button">
+                        <i class="fas fa-laptop-code"></i> Sesje 
+                        <span class="badge bg-primary">{{ sessions_count }}</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link {% if tab == 'policies' %}active{% endif %}" 
+                            onclick="switchTab('policies')" type="button">
+                        <i class="fas fa-shield-alt"></i> Polityki 
+                        <span class="badge bg-success">{{ policies_count }}</span>
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content border border-top-0 p-3 bg-white" id="resultTabsContent">
+                <!-- Export button -->
+                {% if results %}
+                <div class="mb-3">
+                    <a href="{{ url_for('search.export_csv', **request.args) }}" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-file-csv"></i> Eksportuj do CSV
+                    </a>
+                    <span class="text-muted ms-2">
+                        Znaleziono {{ total_count }} wyników (strona {{ page }} z {{ total_pages }})
+                    </span>
+                </div>
+                {% endif %}
+
+                <!-- Sessions Tab -->
+                {% if tab == 'sessions' %}
+                <div class="tab-pane fade show active">
+                    {% if results %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Użytkownik</th>
+                                    <th>Serwer</th>
+                                    <th>Protokół</th>
+                                    <th>Policy</th>
+                                    <th>Status</th>
+                                    <th>Port Fwd</th>
+                                    <th>IP źródłowe</th>
+                                    <th>Rozpoczęcie</th>
+                                    <th>Zakończenie</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for session in results %}
+                                <tr style="cursor: pointer;" onclick="window.location.href='{{ url_for('sessions.view', session_id=session.session_id) }}'">
+                                    <td>{{ session.user.username if session.user else 'N/A' }}</td>
+                                    <td>
+                                        {{ session.server.name if session.server else 'N/A' }}
+                                        <small class="text-muted">({{ session.server.ip_address if session.server else '' }})</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ session.protocol|upper }}</span>
+                                    </td>
+                                    <td onclick="event.stopPropagation();">
+                                        {% if session.policy_id %}
+                                        <a href="{{ url_for('policies.edit', policy_id=session.policy_id) }}">
+                                            #{{ session.policy_id }}
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if session.connection_status == 'denied' %}
+                                        <span class="badge bg-danger">
+                                            <i class="fas fa-ban"></i> {{ session.connection_status }}
+                                        </span>
+                                        {% if session.denial_reason %}
+                                        <br><small class="text-muted">{{ session.denial_reason }}</small>
+                                        {% endif %}
+                                        {% elif session.is_active %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-circle"></i> aktywna
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="far fa-circle"></i> zamknięta
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% set pf_count = session.transfers|selectattr('transfer_type', 'in', ['port_forward_local', 'port_forward_remote', 'socks_connection'])|list|length if session.transfers else 0 %}
+                                        {% if pf_count > 0 %}
+                                        <span class="badge bg-info">
+                                            <i class="fas fa-exchange-alt"></i> {{ pf_count }}
+                                        </span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <code>{{ session.source_ip }}</code>
+                                    </td>
+                                    <td>
+                                        <small>{{ session.started_at.strftime('%Y-%m-%d %H:%M:%S') if session.started_at else '-' }}</small>
+                                    </td>
+                                    <td>
+                                        <small>{{ session.ended_at.strftime('%Y-%m-%d %H:%M:%S') if session.ended_at else '-' }}</small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Nie znaleziono sesji spełniających kryteria wyszukiwania.
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Policies Tab -->
+                {% if tab == 'policies' %}
+                <div class="tab-pane fade show active">
+                    {% if results %}
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Typ</th>
+                                    <th>Użytkownik/Grupa</th>
+                                    <th>Cel</th>
+                                    <th>Protokół</th>
+                                    <th>Okres ważności</th>
+                                    <th>Status</th>
+                                    <th>Akcje</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for policy in results %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('policies.edit', policy_id=policy.id) }}">
+                                            #{{ policy.id }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ policy.scope_type }}</span>
+                                    </td>
+                                    <td>
+                                        {% if policy.user %}
+                                        <i class="fas fa-user"></i> {{ policy.user.username }}
+                                        {% elif policy.user_group %}
+                                        <i class="fas fa-users"></i> {{ policy.user_group.name }}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if policy.target_server %}
+                                        <i class="fas fa-server"></i> {{ policy.target_server.name }}
+                                        {% elif policy.target_group %}
+                                        <i class="fas fa-layer-group"></i> {{ policy.target_group.name }}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ policy.protocol|upper if policy.protocol else 'ANY' }}</span>
+                                    </td>
+                                    <td>
+                                        <small>
+                                            {{ policy.start_time.strftime('%Y-%m-%d %H:%M') if policy.start_time else '-' }}
+                                            <br>
+                                            {{ policy.end_time.strftime('%Y-%m-%d %H:%M') if policy.end_time else '-' }}
+                                        </small>
+                                    </td>
+                                    <td>
+                                        {% if policy.start_time and policy.end_time %}
+                                            {% if now >= policy.start_time and now <= policy.end_time %}
+                                            <span class="badge bg-success">Aktywna</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">Wygasła</span>
+                                            {% endif %}
+                                        {% else %}
+                                        <span class="badge bg-warning">Niepełna</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('policies.edit', policy_id=policy.id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        <a href="{{ url_for('policies.edit', policy_id=policy.id) }}" 
+                                           class="btn btn-sm btn-outline-warning">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Nie znaleziono polityk spełniających kryteria wyszukiwania.
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Pagination -->
+                {% if total_pages > 1 %}
+                <nav aria-label="Search results pagination" class="mt-3">
+                    <ul class="pagination justify-content-center">
+                        {% if page > 1 %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page-1 }}&{{ request.query_string.decode()|replace('page=' ~ page, '')|replace('&&', '&') }}">
+                                <i class="fas fa-chevron-left"></i> Poprzednia
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% for p in range(1, total_pages + 1) %}
+                            {% if p == page %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ p }}</span>
+                            </li>
+                            {% elif p <= 3 or p > total_pages - 3 or (p >= page - 2 and p <= page + 2) %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ p }}&{{ request.query_string.decode()|replace('page=' ~ page, '')|replace('&&', '&') }}">
+                                    {{ p }}
+                                </a>
+                            </li>
+                            {% elif p == 4 or p == total_pages - 3 %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if page < total_pages %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page+1 }}&{{ request.query_string.decode()|replace('page=' ~ page, '')|replace('&&', '&') }}">
+                                Następna <i class="fas fa-chevron-right"></i>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function switchTab(newTab) {
+    // Update hidden field
+    document.querySelector('input[name="tab"]').value = newTab;
+    
+    // Submit form to reload with new tab
+    const form = document.getElementById('searchForm');
+    const url = new URL(form.action);
+    const formData = new FormData(form);
+    
+    // Build query string
+    const params = new URLSearchParams();
+    for (const [key, value] of formData.entries()) {
+        if (value) {
+            params.append(key, value);
+        }
+    }
+    params.set('tab', newTab);
+    params.set('page', '1');  // Reset to page 1 when switching tabs
+    
+    window.location.href = url.pathname + '?' + params.toString();
+}
+
+// Auto-submit on quick filter change
+document.querySelectorAll('.btn-check').forEach(radio => {
+    radio.addEventListener('change', () => {
+        document.getElementById('searchForm').submit();
+    });
+});
+
+// Auto-refresh results every 2 seconds
+let autoRefreshInterval = null;
+
+function startAutoRefresh() {
+    if (autoRefreshInterval) return; // Already running
+    
+    autoRefreshInterval = setInterval(() => {
+        // Reload current page with same parameters
+        const currentUrl = new URL(window.location.href);
+        
+        // Fetch updated results
+        fetch(currentUrl, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.text())
+        .then(html => {
+            // Parse response
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            // Update results table
+            const newResultsContent = doc.querySelector('#resultTabsContent');
+            const currentResultsContent = document.querySelector('#resultTabsContent');
+            
+            if (newResultsContent && currentResultsContent) {
+                currentResultsContent.innerHTML = newResultsContent.innerHTML;
+            }
+            
+            // Update tab badges (counts)
+            const tabBadges = doc.querySelectorAll('.nav-tabs .badge');
+            const currentBadges = document.querySelectorAll('.nav-tabs .badge');
+            
+            tabBadges.forEach((badge, index) => {
+                if (currentBadges[index]) {
+                    currentBadges[index].textContent = badge.textContent;
+                }
+            });
+            
+            // Update result count text
+            const newCountText = doc.querySelector('.text-muted');
+            const currentCountText = document.querySelector('.text-muted');
+            if (newCountText && currentCountText) {
+                currentCountText.textContent = newCountText.textContent;
+            }
+        })
+        .catch(error => {
+            console.error('Auto-refresh failed:', error);
+        });
+    }, 2000); // Refresh every 2 seconds
+    
+    console.log('Auto-refresh started (every 2s)');
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+        console.log('Auto-refresh stopped');
+    }
+}
+
+// Start auto-refresh on page load
+startAutoRefresh();
+
+// Stop auto-refresh when user interacts with form
+document.getElementById('searchForm').addEventListener('submit', () => {
+    stopAutoRefresh();
+});
+
+// Stop auto-refresh when user navigates away
+window.addEventListener('beforeunload', () => {
+    stopAutoRefresh();
+});
+</script>
+{% endblock %}

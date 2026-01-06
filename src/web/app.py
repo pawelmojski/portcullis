@@ -142,6 +142,7 @@ from blueprints.policies import policies_bp
 from blueprints.sessions import sessions_bp
 from blueprints.monitoring import monitoring_bp
 from blueprints.auth import auth_bp
+from search import search_bp
 
 app.register_blueprint(dashboard_bp, url_prefix='/')
 app.register_blueprint(users_bp, url_prefix='/users')
@@ -152,6 +153,7 @@ app.register_blueprint(policies_bp, url_prefix='/policies')
 app.register_blueprint(sessions_bp, url_prefix='/sessions')
 app.register_blueprint(monitoring_bp, url_prefix='/monitoring')
 app.register_blueprint(auth_bp, url_prefix='/auth')
+app.register_blueprint(search_bp, url_prefix='/search')
 
 # Favicon route (prevent 404 errors)
 @app.route('/favicon.ico')
