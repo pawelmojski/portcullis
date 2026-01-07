@@ -1,8 +1,8 @@
-# Jump Host - SSH/RDP Proxy with Access Control
+# Inside - SSH/RDP Gateway with Time-Based Access Control
 
 ## Project Overview
 
-Self-made SSH/RDP jump host with temporal access control, source IP mapping, session recording, real-time monitoring, and system logging integration.
+Inside is a transparent SSH/RDP gateway that controls when real people can be inside your infrastructure. Features: time-limited grants, session recording, real-time monitoring, and full audit trails.
 
 ## Quick Links
 

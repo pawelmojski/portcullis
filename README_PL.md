@@ -1,446 +1,548 @@
-# 🏰 Portcullis - Brama SSH/RDP z Kontrolą Dostępu Opartą na Politykach
+# 🚪 Inside - Brama z Kontrolą Dostępu Czasowego
 
-**Transparentna brama bezpieczeństwa, która stoi między użytkownikami a serwerami backend, egzekwując polityki dostępu, nagrywając sesje i zapewniając scentralizowane zarządzanie.**
+**Przezroczysta brama bezpieczeństwa, która kontroluje kto może być wewnątrz Twojej infrastruktury, kiedy i jak długo.**
 
 [![Status](https://img.shields.io/badge/status-production-brightgreen)]()
-[![Wersja](https://img.shields.io/badge/version-1.8-blue)]()
+[![Version](https://img.shields.io/badge/version-1.8-blue)]()
 [![Python](https://img.shields.io/badge/python-3.13-blue)]()
 
 ---
 
-## 💡 Czym jest Portcullis?
+## 🎯 Model Mentalny: Nie "Dostęp", ale "Bycie Wewnątrz"
 
-Wyobraź sobie, że masz 50 serwerów i 20 pracowników. Każdy pracownik potrzebuje dostępu do różnych serwerów w różnym czasie. Tradycyjne podejście: tworzysz konta na każdym serwerze, zarządzasz kluczami SSH, pamiętasz kto ma dostęp gdzie, ręcznie odwołujesz gdy ktoś odchodzi.
+**Inside nie zarządza tożsamościami. Inside zarządza tym, kiedy prawdziwi ludzie mogą być wewnątrz Twojej infrastruktury.**
 
-**Portcullis stoi pośrodku** i rozwiązuje ten problem:
+To jest różnica, która:
+- ✅ Odróżnia Inside od Teleport, PAM-ów i ZTNA
+- ✅ Tłumaczy, czemu wdrożenie zajmuje 1 godzinę, a nie miesiące
+- ✅ Sprawia, że system jest natychmiast zrozumiały dla każdego
+
+### Natychmiastowa Jasność
+
+Nie "dostęp", nie "tożsamość", nie "kontrola".
+
+Każdy od razu rozumie:
+- 👤 **Kto jest wewnątrz** w tej chwili
+- 🎫 **Kto może być wewnątrz** (i kiedy)
+- 🎬 **Co robi będąc wewnątrz**
+- ⏰ **Kiedy przestaje być wewnątrz**
+
+Nie trzeba tłumaczyć architektury.
+
+### Idealny Język Operacyjny
+
+To jest mega ważne.
+
+*"Kto jest wewnątrz produkcji teraz?"*
+
+*"Był wewnątrz przez 30 minut."*
+
+*"Ta obecność trwa do 14:30."*
+
+*"Nikt nie może być wewnątrz bez grantu."*
+
+Brzmi jak rzeczywistość, nie jak system.
+
+---
+
+## 💡 Czym jest Inside?
+
+Wyobraź sobie, że masz 50 serwerów i 20 pracowników. Każda osoba potrzebuje dostępu do różnych serwerów w różnym czasie. Tradycyjne podejście: tworzenie kont na każdym serwerze, zarządzanie kluczami SSH, pamiętanie kto ma dostęp gdzie, ręczne odwoływanie gdy ktoś odchodzi.
+
+**Inside siedzi pośrodku** i rozwiązuje to:
 
 ```
-Komputer Użytkownika → Brama Portcullis → Serwer Backend
-    (skądkolwiek)          (jedno miejsce)      (10.0.x.x)
+Komputer Osoby → Brama Inside → Serwer Backendowy
+   (gdziekolwiek)   (jedno miejsce)    (10.0.x.x)
 ```
 
-Z perspektywy użytkownika: `ssh server.firma.pl` - działa jak normalny SSH/RDP.
-Za kulisami: Portcullis sprawdza "czy ten użytkownik ma uprawnienia WŁAŚNIE TERAZ?" i albo zezwala, albo odmawia.
+Z perspektywy osoby: `ssh serwer.firma.pl` - działa jak normalny SSH/RDP.
+Za kulisami: Inside sprawdza "czy ta osoba ma ważny grant W TEJ CHWILI?" i albo pozwala, albo odmawia.
 
-### Kluczowy Koncept: Czasowe Granty Dostępu
+### Kluczowa Koncepcja: Granty Czasowe
 
-Zamiast stałych kont, **przydzielasz tymczasowy dostęp**:
+Zamiast stałych kont, **przyznaj esz czasowy dostęp**:
 
 ```bash
-# Daj Alicji 8 godzin dostępu do produkcyjnej bazy danych
-portcullis grant alice --server prod-db-01 --duration 8h
+# Daj Alice 8 godzin na bycie wewnątrz produkcyjnej bazy danych
+inside grant alice --server prod-db-01 --duration 8h
 
-# Alicja może teraz: ssh alice@prod-db-01
-# Po 8 godzinach: Dostęp automatycznie wygasa, bez sprzątania
+# Alice może teraz: ssh alice@prod-db-01
+# Po 8 godzinach: Dostęp automatycznie wygasa, brak sprzątania
 ```
 
 Wszystko jest:
-- ✅ **Scentralizowane** - jedno miejsce do zarządzania wszystkimi dostępami
-- ✅ **Tymczasowe** - dostęp wygasa automatycznie
-- ✅ **Audytowane** - każde połączenie zapisane
-- ✅ **Elastyczne** - przydzielaj dostęp do grup, pojedynczych serwerów lub konkretnych protokołów
+- ✅ **Scentralizowane** - jedno miejsce do zarządzania dostępem
+- ✅ **Tymczasowe** - granty wygasają automatycznie
+- ✅ **Audytowane** - każda obecność wewnątrz jest nagrana
+- ✅ **Elastyczne** - przyznaj dostęp do grup, pojedynczych serwerów lub konkretnych protokołów
 
 ---
 
-## 🎯 Jak to Działa
+## 🏗️ Podstawowe Koncepcje
 
-### 1. Brama (Portcullis)
+### 👤 Person (Osoba)
 
-Portcullis działa na jednym serwerze (np. `gateway.firma.pl`):
-- **Port 22** - Ruch SSH przechodzi tutaj
-- **Port 3389** - Ruch RDP przechodzi tutaj
-- **Port 5000** - Interfejs webowy zarządzania
+Prawdziwy człowiek.
+- Ma imię i nazwisko (np. "Paweł Mojski")
+- Ma konto w AAD / LDAP / czymkolwiek
+- **NIE loguje się do systemów** - osoby wchodzą do środowisk
 
-### 2. Granty Dostępu (Polityki)
+### 🎫 Grant
 
-Zarządzasz dostępem przez **polityki** (granty):
+Pozwolenie na bycie wewnątrz.
+- Definiuje **gdzie** (które serwery/grupy)
+- Definiuje **jak długo** (8 godzin, tydzień, na stałe)
+- Definiuje **pod jakimi warunkami** (okna czasowe, protokoły, dozwolone loginy SSH)
 
-**Przykład: Grant dostępu do grupy**
-```
-Użytkownik: jan
-Cel: Wszystkie serwery w grupie "Bazy Produkcyjne"
-Protokół: Tylko SSH
-Czas trwania: 24 godziny
-Loginy SSH: postgres, readonly
-```
+**Grant pozwala osobie być wewnątrz.**
 
-Gdy Jan próbuje się połączyć:
-```bash
-jan@laptop:~$ ssh postgres@prod-db-01.firma.pl
-# ↓ Połączenie trafia do Portcullis
-# ↓ Portcullis sprawdza: Czy jan ma aktywny grant do prod-db-01?
-# ✅ TAK - proxy połączenie do prawdziwego serwera prod-db-01
-# ❌ NIE - pokaż przyjazną wiadomość "dostęp zabroniony"
-```
+Nie:
+- ❌ rola
+- ❌ grupa
+- ❌ dokument polityki
 
-### 3. Co Widzi Użytkownik
+Tylko konkretne pozwolenie.
 
-**Z GRANTEM DOSTĘPU:**
-```bash
-$ ssh moj-user@serwer-docelowy
-# Działa dokładnie jak normalny SSH
-# Użytkownik nawet nie wie, że Portcullis jest pośrodku
-```
+### 🏃 Stay (Obecność)
 
-**BEZ GRANTU DOSTĘPU:**
-```
-+====================================================================+
-|                        DOSTĘP ZABRONIONY                           |
-+====================================================================+
+Fakt bycia wewnątrz.
+- **Stay zaczyna się** gdy osoba wchodzi (pierwsze połączenie)
+- **Stay kończy się** gdy grant wygasa lub zostaje odwołany
+- **Stay jest zawsze powiązany** z osobą i grantem
+- **Stay może mieć wiele sesji** (disconnect/reconnect)
 
-  Szanowny użytkowniku,
+Osoba **pozostaje wewnątrz** nawet między połączeniami.
 
-  Brak aktywnego grantu dostępu dla Twojego adresu IP: 100.64.0.20
+Nie:
+- ❌ sesja
+- ❌ połączenie
+- ❌ logowanie
 
-  Powód: Brak pasującej polityki dostępu
+### 🔌 Session (Sesja)
 
-  Skontaktuj się z administratorem aby poprosić o dostęp.
-```
+Pojedyncze połączenie TCP w ramach stay.
+- Połączenie SSH (terminal)
+- Połączenie RDP (pulpit)
+- Połączenie HTTP (GUI web)
 
-### 4. Nagrywanie Sesji
+Szczegół techniczny. Stay jest tym, co się liczy.
 
-Każde połączenie jest nagrywane:
-- **Sesje SSH** - Pełne nagranie terminala (jak asciinema)
-- **Sesje RDP** - Nagranie wideo z możliwością odtworzenia
-- **Log audytu** - Kto połączył się kiedy, skąd, do którego serwera
+### 🚪 Entry (Wejście)
 
-Interfejs webowy pokazuje:
-- Aktywne sesje (kto jest teraz połączony)
-- Historia sesji (szukaj po użytkowniku, serwerze, dacie)
-- Podgląd na żywo (oglądaj sesję SSH w czasie rzeczywistym)
-- Odtwarzanie nagrań
+Sposób dostania się do środka.
+- **ssh_proxy** - Entry przez SSH (port 22)
+- **rdp_proxy** - Entry przez RDP (port 3389)
+- **http_proxy** - Entry przez HTTP/HTTPS (przyszłość)
 
----
+Entry sprawdza grant, rozpoczyna lub dołącza do stay.
 
-## 🚀 Przykład ze Świata Rzeczywistego
+### 🧾 Username
 
-### Scenariusz: Awaryjny Dostęp do Bazy Danych
+Techniczny identyfikator w systemach backendowych.
+- Istnieje na hostach (konta Linux, użytkownicy DB, etc.)
+- Istnieje w legacy (Cisco, routery, appliance)
+- **NIE reprezentuje osoby**
 
-**9:00** - Zgłoszono problem z bazą danych
+**Username to szczegół implementacyjny.**
 
-**Team Lead:**
-```bash
-# Przyznaj DBA dostęp na 4 godziny
-portcullis grant alice --server prod-db-01 --duration 4h --protocol ssh
-```
+Inside mapuje `username → person`, ale:
+- ❌ Nie zmienia hosta
+- ❌ Nie zmienia klienta
+- ❌ Nie informuje AAD
+- ❌ Nie informuje targetu
 
-**Alicja (z domu, VPN, albo biura):**
-```bash
-alice@laptop:~$ ssh postgres@prod-db-01
-# Działa natychmiast, nie trzeba kopiować kluczy, tworzyć kont na serwerze
-```
+To jest kluczowy punkt architektury.
 
-**13:00** - Problem rozwiązany, dostęp wygasa automatycznie
+### 📜 Record (Zapis)
 
-**Później** - Team lead sprawdza:
-- Panel webowy pokazuje że Alicja była połączona 9:15-10:30
-- Można obejrzeć nagranie terminala aby zobaczyć jakie komendy zostały wykonane
-- Log audytu pokazuje połączenie z IP 100.64.0.25
+Ślad audytowy.
+- **Kto był wewnątrz** (osoba)
+- **Kiedy** (znaczniki czasu)
+- **Na podstawie jakiego grantu**
+- **Co robił** (nagrania sesji)
+
+Audyt bez audytu.
 
 ---
 
-## 🎨 Interfejs Webowy Zarządzania
+## 🎯 Jak To Działa
 
-Dostęp pod `http://gateway.firma.pl:5000`
+### 1. Brama (Inside)
+
+Inside działa na jednym serwerze (np. `gateway.firma.pl`):
+- **Port 22** - punkt wejścia SSH
+- **Port 3389** - punkt wejścia RDP
+- **Port 5000** - interfejs web do zarządzania
+
+### 2. Osoba Wchodzi przez Entry
+
+Osoba próbuje się połączyć:
+```bash
+ssh alice@prod-db-01.firma.pl
+```
+
+Inside (ssh_proxy):
+1. Identyfikuje osobę po IP źródłowym
+2. Sprawdza czy osoba ma ważny grant do celu
+3. Jeśli tak: Tworzy lub dołącza do stay, przekazuje połączenie
+4. Jeśli nie: Odmawia, zapisuje powód odmowy
+
+### 3. Bycie Wewnątrz (Stay)
+
+Alice jest teraz **wewnątrz prod-db-01**:
+- Może disconnect/reconnect swobodnie (ten sam stay)
+- Wszystkie sesje nagrane (logi terminala)
+- Widoczne w dashboardzie: "Alice jest wewnątrz prod-db-01"
+
+### 4. Koniec Stay
+
+Stay kończy się gdy:
+- Grant wygasa (osiągnięty limit czasu)
+- Admin odwołuje grant
+- Okno harmonogramu się zamyka (np. poza godzinami pracy)
+
+Aktywne sesje przerwane, osoba nie może już wejść.
+
+---
+
+## 🌟 Przykład z Prawdziwego Świata
+
+**Problem:** Problem z produkcyjną bazą danych o 9 rano. DBA potrzebuje natychmiastowego dostępu.
+
+**Tradycyjne podejście:**
+1. Utwórz konto VPN (15 minut)
+2. Utwórz klucz SSH (5 minut)
+3. Dodaj klucz do prod-db (10 minut + ticket zmian)
+4. DBA się łączy (w końcu!)
+5. Pamiętaj żeby odwołać później (zazwyczaj zapominane)
+
+**Z Inside:**
+```bash
+# Admin (30 sekund):
+inside grant dba-john --server prod-db-01 --duration 4h
+
+# DBA (natychmiast):
+ssh dba-john@prod-db-01.firma.pl
+```
+
+- ✅ Dostęp przyznany w 30 sekund
+- ✅ Automatycznie wygasa za 4 godziny
+- ✅ Pełne nagranie sesji
+- ✅ Ślad audytowy: "John był wewnątrz prod-db-01 od 09:00 do 13:00"
+
+---
+
+## 🎨 Interfejs Web do Zarządzania
 
 ### Dashboard
-- 🟢 Status usług (SSH Proxy, RDP Proxy działają)
-- 📊 Szybkie statystyki (15 użytkowników, 42 serwery, 8 aktywnych sesji)
-- 📅 Dzisiejsza aktywność (23 połączenia, 2 odmowy, 91% sukces)
-- 🔄 Auto-odświeżanie co 5 sekund
 
-### Kreator Przydzielania Dostępu
+Widok w czasie rzeczywistym:
+- **Kto jest wewnątrz teraz** (aktywne stay)
+- **Ostatnie wejścia** (ostatnie 100 prób)
+- **Granty wygasające wkrótce**
+- **Statystyki** (obecności dzisiaj, dostępne nagrania)
 
-**Prosty proces 3 kroków:**
+Auto-odświeżanie co 5 sekund.
 
-1. **Kto?** Wybierz użytkownika (lub utwórz nowego)
-2. **Gdzie?** Wybierz:
-   - Grupa serwerów (np. "Wszystkie produkcyjne bazy")
-   - Pojedynczy serwer (np. "app-server-01")
-   - Konkretna usługa (np. "db-01 tylko SSH")
-3. **Jak długo?** Wpisz czas: `2h`, `3d`, `1w`, lub `permanent`
+### Kreator Tworzenia Grantów
 
-**Opcje zaawansowane:**
-- Filtrowanie protokołu (tylko SSH, tylko RDP, lub oba)
-- Ograniczenia loginów SSH (tylko konta `postgres` i `readonly`)
-- Okna harmonogramu (Poniedziałek-Piątek 9-17)
+Prosty proces 4-etapowy:
+1. **Kto** - Wybierz osobę (lub grupę użytkowników)
+2. **Gdzie** - Wybierz serwery (lub grupę serwerów)
+3. **Jak** - Protokół (SSH/RDP), czas trwania, harmonogram
+4. **Przegląd** - Potwierdź i utwórz
 
-### Wyszukaj Wszystko (Mega-Wyszukiwarka) 🔍
+### Uniwersalne Wyszukiwanie (Mega-Wyszukiwarka)
 
-Zunifikowane wyszukiwanie po wszystkich danych:
-- Szukaj po nazwie użytkownika, nazwie serwera, adresie IP
-- Filtruj po protokole, statusie (aktywne/odmowa), zakresie dat
-- Auto-odświeżanie co 2 sekundy (zobacz nowe sesje na żywo)
-- Eksport do CSV dla raportowania
+Znajdź cokolwiek z 11+ filtrami:
+- Imię osoby, username
+- Serwer, grupa, IP
+- Protokół, status
+- Zakres dat
+- Grant ID, session ID
+- Powód odmowy
 
-**Przykłady:**
-```
-Szukaj: "alice"          → Wszystkie sesje użytkownika alice
-Szukaj: "10.0.1.50"      → Wszystkie połączenia do/z tego IP
-Szukaj: "#42"            → Szczegóły polityki #42
-Szukaj: "denied"         → Wszystkie odmówione próby połączenia
-```
+Eksport wyników do CSV. Auto-odświeżanie co 2 sekundy.
 
----
+### Podgląd Sesji Na Żywo
 
-## 🏗️ Architektura
+Oglądaj aktywne sesje SSH w czasie rzeczywistym:
+- Wyjście terminala (odświeżanie co 2 sekundy)
+- Co osoba pisze w tej chwili
+- Idealne do szkoleń, wsparcia, audytów
 
-### Proste Wdrożenie (Obecne)
+### Nagrania Sesji
 
-```
-┌─────────────────────────────────────────┐
-│         Brama Portcullis                │
-│  ┌─────────────┐  ┌──────────────────┐ │
-│  │  SSH Proxy  │  │   RDP Proxy      │ │
-│  │   (port 22) │  │   (port 3389)    │ │
-│  └─────────────┘  └──────────────────┘ │
-│  ┌─────────────┐  ┌──────────────────┐ │
-│  │  Flask Web  │  │   PostgreSQL     │ │
-│  │ (port 5000) │  │  (polityki, logi)│ │
-│  └─────────────┘  └──────────────────┘ │
-└─────────────────────────────────────────┘
-           │
-           │ Kieruje do serwerów backend
-           ↓
-    ┌──────────────┐  ┌──────────────┐
-    │  Serwer      │  │  Serwer      │
-    │  Backend 1   │  │  Backend 2   │
-    └──────────────┘  └──────────────┘
-```
-
-### Architektura Rozproszona (v1.9 - Wkrótce)
-
-```
-         ┌──────────────────────────┐
-         │    Tower (Kontrola)      │
-         │  - Interfejs Web         │
-         │  - Baza Polityk          │
-         │  - Serwer API            │
-         └────────────┬─────────────┘
-                      │
-        ┬─────────────┼─────────────┬
-        │             │             │
-   ┌────▼───┐    ┌───▼────┐    ┌───▼────┐
-   │ Gate 1 │    │ Gate 2 │    │ Gate 3 │
-   │  DMZ   │    │ Chmura │    │ Biuro  │
-   └────────┘    └────────┘    └────────┘
-```
-
-**Zastosowanie:** Zainstaluj bramę Portcullis w różnych segmentach sieci (DMZ, chmura, biuro) - wszystko zarządzane z jednej Wieży.
+Odtwarzaj przeszłe sesje:
+- **SSH** - Odtwarzacz terminala (jak asciinema)
+- **RDP** - Odtwarzacz wideo MP4
+- Pełna historia, przeszukiwalna, eksportowalna
 
 ---
 
 ## 💎 Funkcje
 
 ### Kontrola Dostępu
-- ✅ **Wiele źródłowych IP per użytkownik** - Dom, biuro, VPN, mobile
+- ✅ **Wiele IP źródłowych na osobę** - Dom, biuro, VPN, mobile
 - ✅ **Grupy serwerów** - Przyznaj dostęp do całych grup ("Wszystkie serwery produkcyjne")
-- ✅ **Granularny zakres** - Poziom grupy, poziom serwera, lub poziom protokołu
-- ✅ **Filtrowanie protokołu** - Tylko SSH, tylko RDP, lub oba
-- ✅ **Ograniczenia loginów SSH** - Zezwalaj tylko na konkretne konta systemowe
-- ✅ **Czasowy dostęp** - Ograniczony czasowo z automatycznym wygaśnięciem
+- ✅ **Szczegółowy zakres** - Poziom grupy, serwera lub protokołu
+- ✅ **Filtrowanie protokołów** - Tylko SSH, tylko RDP lub oba
+- ✅ **Ograniczenia loginów SSH** - Zezwalaj tylko na konkretne konta systemowe (usernames)
+- ✅ **Granty czasowe** - Ograniczone czasowo z automatycznym wygaśnięciem
 - ✅ **Okna harmonogramu** - Dostęp tylko Pon-Pt 9-17, cyklicznie co tydzień
 - ✅ **Rekurencyjne grupy** - Grupy użytkowników z dziedziczeniem
 
-### Zarządzanie Sesjami
-- ✅ **Monitoring na żywo** - Zobacz aktywne sesje w czasie rzeczywistym
+### Zarządzanie Obecnościami (Stay)
+- ✅ **Monitoring na żywo** - Zobacz kto jest wewnątrz w czasie rzeczywistym
 - ✅ **Podgląd SSH na żywo** - Oglądaj sesję terminala w trakcie
 - ✅ **Nagrywanie** - SSH (terminal) i RDP (wideo)
-- ✅ **Odtwarzanie** - Przeglądaj przeszłe sesje
-- ✅ **Wyszukiwanie** - Znajdź sesje po użytkowniku, serwerze, czasie, statusie
-- ✅ **Auto-odświeżanie** - Dashboard co 5s, wyszukiwanie co 2s
-- ✅ **Wygaśnięcie grantu** - Sesje SSH przerywane po zakończeniu grantu (użytkownik dostaje wcześniejsze ostrzeżenie)
+- ✅ **Odtwarzanie** - Przeglądaj przeszłe obecności
+- ✅ **Wyszukiwanie** - Znajdź obecności po osobie, serwerze, czasie, statusie
+- ✅ **Auto-odświeżanie** - Dashboard co 5s, wyszukiwarka co 2s
+- ✅ **Wygaśnięcie grantu** - Sesje przerywane gdy grant się kończy (osoby dostają wcześniejsze ostrzeżenie)
 
 ### Audytowanie
-- ✅ **Próby połączeń** - Zarówno udane jak i odmówione
-- ✅ **Zmiany polityk** - Pełna ścieżka audytu z historią
-- ✅ **Powody odmowy** - Jasne logowanie czemu dostęp został odmówiony
-- ✅ **Eksport** - Eksport CSV dla raportowania/zgodności
+- ✅ **Próby wejścia** - Zarówno udane jak i odmówione
+- ✅ **Zmiany grantów** - Pełny ślad audytowy z historią
+- ✅ **Powody odmowy** - Jasne logowanie dlaczego wejście zostało odmówione
+- ✅ **Eksport** - Eksport CSV do raportowania/zgodności
 
 ### Doświadczenie Użytkownika
-- ✅ **Transparentny** - Działa ze standardowymi klientami SSH/RDP
-- ✅ **Przyjazne błędy** - Jasne komunikaty gdy dostęp odmówiony
-- ✅ **Bez konfiguracji** - Użytkownicy po prostu `ssh serwer`, bez specjalnej konfiguracji
-- ✅ **Agent forwarding** - Klucze SSH działają naturalnie
+- ✅ **Przezroczyste** - Działa ze standardowymi klientami SSH/RDP
+- ✅ **Bez agentów** - Zero oprogramowania na kliencie lub backendzie
+- ✅ **Natywne narzędzia** - Używaj ssh, mstsc, PuTTY - cokolwiek wolisz
+- ✅ **Port forwarding** - SSH -L, -R, -D działają (jeśli grant pozwala)
+- ✅ **Transfer plików** - scp, sftp działają normalnie
 
 ---
 
-## 🔧 Szybki Start
+## 🚀 Dlaczego Inside Jest Inny
 
-### Instalacja
+### 1️⃣ Natychmiastowy Model Mentalny
 
-```bash
-# Zainstaluj zależności systemowe
-sudo apt install postgresql python3.13 python3-pip python3-venv
+Nie "dostęp", nie "tożsamość", nie "kontrola".
 
-# Sklonuj repozytorium
-git clone https://github.com/pawelmojski/portcullis
-cd portcullis
+Każdy natychmiast rozumie:
+- Kto jest wewnątrz
+- Kto może być wewnątrz
+- Co robi będąc wewnątrz
+- Kiedy przestaje być wewnątrz
 
-# Skonfiguruj środowisko wirtualne
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+Nie trzeba tłumaczyć architektury.
 
-# Zainicjuj bazę danych
-sudo -u postgres createdb portcullis
-alembic upgrade head
+### 2️⃣ Praktyczna Rzeczywistość vs. Teoretyczny Ideał
 
-# Uruchom usługi
-sudo systemctl enable --now portcullis-ssh-proxy
-sudo systemctl enable --now portcullis-rdp-proxy
-sudo systemctl enable --now portcullis-flask
+To pokazuje praktyczną różnicę między teorią a realnym IT:
+
+| Aspekt | Inside | Tradycyjne IAM/PAM |
+|--------|--------|---------------------|
+| **Czas wdrożenia** | 1 godzina | Miesiące |
+| **Inwazyjność** | Zero zmian w klientach/serwerach | Agenty, konfiguracje wszędzie |
+| **Akceptacja użytkowników** | Użytkownicy niczego nie zauważają | Programiści protestują |
+| **Kontrola i audyt** | Pełna odpowiedzialność per stay | Słabe śledzenie sesji |
+| **Skalowalność** | Każdy nowy VM/serwer auto-chroniony | Konfiguracja per-host |
+
+💡 **Puenta dla CTO/CISO:**
+
+*"Nie zmieniamy świata - dajemy Ci pełną odpowiedzialność i audyt w realnym IT w godzinę, nie w miesiące."*
+
+### 3️⃣ Tożsamość to NIE username
+
+- ✅ **Tożsamość = osoba**, nie konto systemowe
+- Konta systemowe mogą być: współdzielone, sklonowane, tymczasowe
+- Każdy stay jest powiązany z **konkretną osobą**
+
+> 💡 **Dla audytora/CTO:** Konto techniczne ≠ odpowiedzialność użytkownika
+
+### 4️⃣ Dostęp skoncentrowany na Stay
+
+- ⏱ **Granty czasowe** - dostęp tylko w wyznaczonym czasie
+- 🔒 **Brak aktywnego grantu → brak wejścia**
+- ❌ **Stay kończy się automatycznie gdy grant wygasa**
+
+> 🔑 Kontrola obecności zamiast walki z systemowym IAM
+
+### 5️⃣ Pełna audytowalność
+
+- 🎥 **Nagrywanie każdej sesji**
+- 📝 Sesje powiązane z osobą, nie kontem
+- 🔍 Możliwość przeglądu działań każdej osoby
+
+> 📜 **ISO 27001:** audytowalność i odpowiedzialność spełnione
+
+### 6️⃣ Projekt nieinwazyjny
+
+- ⚡ Nie wymaga agentów, PAM, ani zmian w firewallu
+- 🖥 Działa z natywnymi narzędziami (SSH, vendor CLI)
+- ♻️ Idealny dla systemów legacy i appliance'ów
+
+> 🛡 Minimalne ryzyko operacyjne i łatwe wdrożenie
+
+### 7️⃣ Praktyczna rzeczywistość
+
+- 🖥 VM sklonowane → automatycznie podlega zasadom Inside
+- 👥 Współdzielone konta → audytowalne obecności
+- ⏳ Maszyny "tymczasowe" → nagrane i kontrolowane, nawet po latach
+
+> 🚀 System dopasowany do **realnego IT**, nie teoretycznego ideału
+
+### 8️⃣ Zgodność z ISO 27001
+
+- ✅ Kontrolowany dostęp
+- ✅ Least privilege (czasowo)
+- ✅ Odpowiedzialność i audytowalność
+- ✅ Nieinwazyjne wdrożenie
+
+> 📌 Spełnia **rzeczywiste wymagania audytu** bez rewolucji w IAM
+
+### 9️⃣ Kluczowy wniosek
+
+> **"Nie naprawiamy świata. Naprawiamy odpowiedzialność.**
+> **Liczy się kto działa, kiedy i co robi - nie konto."**
+
+---
+
+## 🏗️ Architektura
+
+### Obecna Architektura (v1.8)
+
+```
+Osoba (gdziekolwiek)
+    ↓
+Brama Inside (jeden serwer)
+    ├── ssh_proxy (Entry przez SSH :22)
+    ├── rdp_proxy (Entry przez RDP :3389)
+    └── web_ui (:5000)
+    ↓
+Serwery Backendowe (10.0.x.x)
 ```
 
-### Pierwsze Użycie
+### Jak Działa Entry
 
-1. **Wejdź na interfejs webowy:** http://twoj-serwer:5000
-2. **Dodaj siebie jako użytkownika:**
-   - Użytkownicy → Dodaj Użytkownika
-   - Wprowadź swoje imię, email
-   - Dodaj swoje źródłowe IP (zobacz "Mój IP: X.X.X.X" w prawym górnym rogu)
-3. **Dodaj serwer backend:**
-   - Serwery → Dodaj Serwer
-   - Nazwa: `test-serwer`, IP: `10.0.1.100`
-4. **Przyznaj sobie dostęp:**
-   - Polityki → Przyznaj Dostęp
-   - Wybierz siebie, wybierz serwer, czas trwania `1h`
-5. **Przetestuj połączenie:**
-   ```bash
-   ssh twoj-login@test-serwer
-   ```
+```
+1. Osoba łączy się: ssh alice@prod-db-01
+2. Entry (ssh_proxy) wyciąga:
+   - IP źródłowe (identyfikuje osobę)
+   - Hostname docelowy (identyfikuje serwer)
+3. Zapytanie do bazy:
+   - Osoba ma ważny grant?
+   - Grant zezwala na SSH?
+   - Grant zezwala na ten serwer?
+   - Grant zezwala na tego SSH username?
+4. Jeśli tak:
+   - Utwórz lub dołącz do stay
+   - Utwórz sesję w ramach stay
+   - Przekaż do backendu
+   - Nagraj wszystko
+5. Jeśli nie:
+   - Odmów wejścia
+   - Zapisz powód odmowy
+```
+
+### Przyszła Architektura (v1.9+)
+
+**Rozproszona:** Tower (płaszczyzna kontroli) + Gates (płaszczyzny danych)
+
+```
+Tower (Płaszczyzna Kontroli)
+├── Web UI
+├── REST API (/api/v1/)
+└── PostgreSQL (granty, obecności, osoby)
+
+Gates (Płaszczyzna Danych - rozproszone)
+├── Gate 1 (DMZ) - ssh/rdp/http entry
+├── Gate 2 (Cloud) - ssh/rdp entry
+└── Gate 3 (Biuro) - tylko ssh entry
+
+Komunikacja: REST API + lokalny cache
+```
+
+Korzyści:
+- Skalowanie horyzontalne (dodaj więcej Gates)
+- Dystrybucja geograficzna
+- Tryb offline (Gates cache'ują granty)
+- Redukcja promienia rażenia
 
 ---
 
-## 📖 Typowe Przypadki Użycia
+## 📋 Przypadki Użycia
 
-### 1. Dostęp dla Kontrahenta
+### 1. Dostęp Kontraktora
 
-**Problem:** Trzeba dać kontrahencie tymczasowy dostęp do konkretnych serwerów.
+**Problem:** Zewnętrzny kontraktor potrzebuje 2 tygodnie dostępu do środowiska stagingowego.
 
 **Rozwiązanie:**
 ```bash
-# Dodaj kontrahenta
-portcullis user add kontrahent-jan --email jan@zewnetrzna.pl
-portcullis user add-ip kontrahent-jan 203.0.113.50 --label "VPN Kontrahenta"
-
-# Przyznaj 2-tygodniowy dostęp tylko do serwerów dev
-portcullis grant kontrahent-jan --group "Serwery Deweloperskie" --duration 14d
-
-# Dostęp automatycznie wygasa, nie trzeba sprzątać
+inside grant kontraktor-bob --group staging-servers --duration 14d
 ```
+
+Po 14 dniach: automatyczne wygaśnięcie, brak sprzątania.
 
 ### 2. Rotacja Dyżurów
 
-**Problem:** Co tydzień inna osoba ma dostęp do produkcji.
+**Problem:** Tygodniowy dyżurny inżynier potrzebuje awaryjnego dostępu do produkcji.
 
 **Rozwiązanie:**
 ```bash
-# Tydzień 1: Alicja dyżuruje
-portcullis grant alice --group "Produkcja" --duration 7d
-
-# Tydzień 2: Bartek dyżuruje (grant Alicji już wygasł)
-portcullis grant bartek --group "Produkcja" --duration 7d
+# Każdy poniedziałek, przyznaj obecnemu dyżurnemu
+inside grant oncall-engineer --group production \
+  --schedule "Mon-Sun 00:00-23:59" \
+  --duration 7d
 ```
 
-### 3. Dostęp Awaryjny
+Grant automatycznie wygasa, nowy dyżurny dostaje nowy grant.
 
-**Problem:** Baza padła o 2 w nocy, potrzebny dostęp DBA TERAZ.
+### 3. Tymczasowa Eskalacja Uprawnień
+
+**Problem:** Junior admin potrzebuje sudo na konkretne 1-godzinne okno maintenance.
 
 **Rozwiązanie:**
 ```bash
-# Z telefonu przez curl:
-curl -X POST https://gateway/api/v1/grant \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"user":"dba-alice","server":"prod-db","duration":"4h"}'
-
-# DBA może się połączyć natychmiast z dowolnego miejsca
+inside grant junior-admin --server app-01 \
+  --ssh-login root \
+  --duration 1h
 ```
+
+Po 1 godzinie: dostęp root automatycznie odwołany, stay kończy się.
 
 ### 4. Audyt Zgodności
 
-**Problem:** "Pokaż mi wszystkich którzy mieli dostęp do produkcji w zeszłym miesiącu."
+**Problem:** "Pokaż mi wszystkich, którzy byli wewnątrz produkcji w zeszłym miesiącu."
 
 **Rozwiązanie:**
-- Interfejs Web → Wyszukiwanie
-- Filtr: server_group="Produkcja", date_from="2025-12-01"
+- Web UI → Wyszukiwanie
+- Filtr: server_group="Production", date_from="2025-12-01"
 - Eksport → CSV
-- Gotowe. Pełna ścieżka audytu z nagraniami sesji.
+- Gotowe. Pełny ślad audytowy z nagraniami sesji.
 
 ---
 
-## 🎓 Kluczowe Pojęcia
+## 🔐 Bezpieczeństwo
 
-### Polityki (Granty)
+### Autentykacja
 
-Polityka to: "Użytkownik X może mieć dostęp do Celu Y przez Protokół Z przez Czas D"
+- **Identyfikacja osoby** - Po IP źródłowym (mapowane na osobę w bazie)
+- **Bez haseł** - Inside nigdy nie obsługuje haseł
+- **Autentykacja backendowa** - Klucze SSH, dane RDP przechowywane per osoba
 
-**Komponenty:**
-- **Użytkownik** - Kto dostaje dostęp
-- **Cel** - Grupa serwerów, pojedynczy serwer, lub konkretna usługa
-- **Protokół** - SSH, RDP, lub oba
-- **Czas trwania** - Jak długo (lub permanentnie)
-- **Harmonogram** (opcjonalnie) - Okna czasowe (np. tylko w godzinach pracy)
-- **Loginy SSH** (opcjonalnie) - Ogranicz które konta systemowe
+### Autoryzacja
 
-### Źródłowe IP Użytkowników
+- **Oparta na grantach** - Każde wejście sprawdzane względem aktywnych grantów
+- **Czasowa** - Granty wygasają automatycznie
+- **Szczegółowa** - Per-osoba, per-serwer, per-protokół, per-username
 
-Użytkownicy mogą mieć wiele źródłowych IP:
-- Dom: `192.168.1.100`
-- Biuro: `10.0.50.25`
-- VPN: `100.64.0.10`
-- Mobile: `203.0.113.5`
+### Ślad Audytowy
 
-Gdy użytkownik łączy się z KTÓREGOKOLWIEK z tych IP, Portcullis go rozpoznaje.
+- **Niezmienne zapisy** - Wszystkie wejścia logowane (sukces + odmowa)
+- **Nagrania sesji** - Logi terminala (SSH), wideo (RDP)
+- **Historia zmian** - Tworzenie/modyfikacja/usuwanie grantów śledzone
 
-### Grupy Serwerów
+### Kontrola Sesji
 
-Organizuj serwery logicznie:
-- "Bazy Produkcyjne"
-- "Serwery Deweloperskie"
-- "Serwery Web w DMZ"
-
-Przyznaj dostęp do całej grupy zamiast pojedynczych serwerów.
-
-### Stany Sesji
-
-- **Aktywna** - Użytkownik obecnie połączony
-- **Zamknięta** - Sesja zakończona normalnie
-- **Odmowa** - Próba połączenia zablokowana (brak polityki)
-
----
-
-## 🔒 Funkcje Bezpieczeństwa
-
-### Obrona Warstwowa
-
-1. **Poziom Sieciowy** - Tylko Portcullis dostępny z internetu
-2. **Poziom Polityk** - Szczegółowa kontrola dostępu
-3. **Poziom Protokołu** - Filtruj SSH vs RDP
-4. **Poziom Kont** - Ogranicz konta systemowe SSH
-5. **Poziom Czasowy** - Automatyczne wygasanie
-6. **Poziom Audytu** - Wszystko logowane
-
-### Co Jest Nagrywane
-
-- Próby połączeń (udane i odmówione)
-- Źródłowe IP, serwer docelowy, protokół
-- Czas trwania, przesłane bajty
-- Pełne nagranie sesji (terminal lub wideo)
-- Polityka która przyznała/odmówiła dostępu
-- Powód odmowy jeśli zablokowane
-
-### Odmowa Dostępu
-
-Gdy dostęp odmówiony, użytkownik widzi:
-- Przyjazną wiadomość (nie kryptyczny błąd)
-- Powód odmowy
-- Jak poprosić o dostęp
-
-Portcullis loguje:
-- Próbowany użytkownik, serwer, źródłowe IP
-- Powód odmowy (brak polityki, wygasł, zły protokół, etc.)
-- Timestamp
+- **Monitoring na żywo** - Zobacz kto jest wewnątrz teraz
+- **Wymuszone przerwanie** - Admin może zabić aktywne stay
+- **Auto-przerwanie** - Stay kończy się gdy grant wygasa (z ostrzeżeniami)
 
 ---
 
@@ -451,12 +553,12 @@ Portcullis loguje:
 Kontroluj kto może robić SSH port forwarding:
 
 ```bash
-# Grant z dozwolonym port forwarding
-portcullis grant alice --server bastion \
+# Grant z dozwolonym port forwardingiem
+inside grant alice --server bastion \
   --allow-port-forwarding local,remote,dynamic
 
-# Grant bez port forwarding
-portcullis grant bartek --server app-server \
+# Grant bez port forwardingu
+inside grant bob --server app-server \
   --no-port-forwarding
 ```
 
@@ -465,117 +567,189 @@ portcullis grant bartek --server app-server \
 Dostęp tylko w godzinach pracy:
 
 ```bash
-portcullis grant alice --server prod-db \
-  --schedule "Pon-Pt 09:00-17:00" \
+inside grant alice --server prod-db \
+  --schedule "Mon-Fri 09:00-17:00" \
   --timezone "Europe/Warsaw"
 ```
 
-Cyklicznie co tydzień - użytkownik może się łączyć w dowolnym momencie w harmonogramie, automatycznie blokowany poza nim.
+Cyklicznie co tydzień - osoba może wejść kiedykolwiek w harmonogramie, automatycznie blokowana poza nim.
 
 ### Tryb TPROXY (v1.9)
 
-Transparentny proxy dla routerów (Tailscale, bramy VPN):
+Transparentne proxy dla routerów Linux:
 
 ```bash
-# Użytkownik myśli że łączy się bezpośrednio
-ssh user@10.50.1.100
+# Osoba łączy się bezpośrednio z IP serwera
+ssh 10.50.1.100
 
-# Iptables kieruje przez Portcullis transparentnie
+# iptables przekierowuje do Inside
 iptables -t mangle -A PREROUTING -p tcp --dport 22 \
   -j TPROXY --on-port 2222
 
-# Portcullis widzi oryginalne docelowe IP, sprawdza politykę
+# Inside wyciąga prawdziwy cel (SO_ORIGINAL_DST)
+# Osoba nie wie, że Inside istnieje
 ```
 
----
+Idealne dla Tailscale exit nodes, koncentratorów VPN.
 
-## 🚧 Plan Rozwoju
+### HTTP/HTTPS Proxy (v2.1 - Przyszłość)
 
-### v1.9 - Architektura Rozproszona & TPROXY
-- Wdrożenie wielu bram (DMZ, chmura, biuro)
-- Separacja Tower (płaszczyzna kontroli) + Gate (płaszczyzna danych)
-- Tryb transparentnego proxy TPROXY
-- Lokalne cache'owanie dla odporności offline
-
-### v2.0 - CLI & Automatyzacja
-- Pełne narzędzie CLI oparte na curl
-- Uwierzytelnianie API przez tokeny
-- Bash completion
-- Powiadomienia webhook (Slack, Teams)
-- Integracja FreeIPA/LDAP
-
----
-
-## 📊 Monitoring & Operacje
-
-### Sprawdzenie Zdrowia
+Dla starych urządzeń sieciowych (stare switche, routery, appliance):
 
 ```bash
-# Sprawdź wszystkie usługi
-systemctl status portcullis-*
+# Przyznaj dostęp do GUI web switcha
+inside grant network-admin --server old-cisco-switch \
+  --protocol http --duration 2h
 
-# Zobacz logi
-journalctl -u portcullis-ssh-proxy -f
-tail -f /var/log/portcullis/ssh_proxy.log
+# Osoba używa przeglądarki z proxy
+https_proxy=gateway:8080 firefox
 ```
+
+MITM dla pełnej kontroli HTTPS, nagrywanie sesji dla GUI web.
+
+---
+
+## 📊 Monitoring i Operacje
+
+### Zdrowie Systemu
+
+- Status PostgreSQL
+- Procesy proxy (ssh_proxy, rdp_proxy)
+- Wykorzystanie miejsca na nagrania
+- Liczba aktywnych obecności
 
 ### Metryki
 
-Dashboard webowy pokazuje:
-- Liczba aktywnych sesji
-- Połączenia na godzinę (wykres)
-- Top użytkownicy według aktywności
-- Odmówione próby
-- Ostrzeżenia o wygasających politykach
+- Wejścia na godzinę (udane / odmówione)
+- Średni czas trwania stay
+- Najczęściej dostępne serwery
+- Kolejka konwersji nagrań
 
-### Konserwacja
+### Alerty
+
+- Grant wygasa wkrótce (< 1 godzina)
+- Miejsce na nagrania > 80%
+- Skok odmówionych wejść
+- Serwer backendowy nieosiągalny
+
+---
+
+## 🗓️ Plan Rozwoju
+
+### Obecnie: v1.8 (Mega-Wyszukiwarka) ✅
+
+- Uniwersalne wyszukiwanie z 11+ filtrami
+- Auto-odświeżanie dashboardu
+- Eksport CSV
+- Pełny ślad audytowy
+
+### Następnie: v1.9 (Rozproszone + TPROXY) 🎯
+
+- Architektura Tower/Gate (rozproszona)
+- TPROXY transparentne proxy
+- Warstwa API (REST)
+- Ulepszenia GUI
+
+### Przyszłość: v2.0 (Narzędzia CLI) 💡
+
+- CLI oparte na curl (`inside grant`, `inside stays`)
+- Autentykacja tokenami
+- Bash completion
+
+### Przyszłość: v2.1 (HTTP Proxy) 🔮
+
+- HTTP/HTTPS proxy dla urządzeń legacy
+- MITM dla GUI web (stare switche, routery)
+- Kontrola dostępu web oparta na politykach
+
+---
+
+## 📚 Szybki Start
+
+### Wymagania
+
+- Serwer Linux (zalecany Debian 12)
+- PostgreSQL 15+
+- Python 3.13+
+- Publiczne IP lub dostęp VPN dla klientów
+
+### Instalacja
 
 ```bash
-# Backup bazy danych
-pg_dump portcullis > backup.sql
+# 1. Sklonuj repozytorium
+git clone https://github.com/pawelmojski/inside.git
+cd inside
 
-# Zobacz nagrania sesji
-ls /var/recordings/portcullis/ssh/
-ls /var/recordings/portcullis/rdp/
+# 2. Zainstaluj zależności
+pip install -r requirements.txt
 
-# Wyczyść stare nagrania (>90 dni)
-find /var/recordings/ -mtime +90 -delete
+# 3. Skonfiguruj bazę danych
+sudo -u postgres createdb inside
+alembic upgrade head
+
+# 4. Konfiguracja
+cp config/inside.conf.example config/inside.conf
+vim config/inside.conf
+
+# 5. Uruchom usługi
+sudo systemctl start inside-ssh-proxy
+sudo systemctl start inside-rdp-proxy
+sudo systemctl start inside-flask
 ```
 
----
+### Pierwszy Grant
 
-## 🤝 Współpraca
-
-Wkład mile widziany! Obszary w których chętnie przyjmiemy pomoc:
-- Integracja FreeIPA/LDAP
-- Playbooki Ansible do wdrożenia
-- Moduły Terraform
-- Charty Kubernetes Helm
-- Dodatkowe metody uwierzytelniania
-
----
-
-## 🎯 TL;DR
-
-**Portcullis = Brama bezpieczeństwa która:**
-- Stoi między użytkownikami a serwerami
-- Egzekwuje czasowe polityki dostępu
-- Nagrywa każdą sesję
-- Pokazuje wszystko w interfejsie web
-- Działa ze standardowymi klientami SSH/RDP
-
-**Jedna komenda aby przyznać dostęp:**
 ```bash
-portcullis grant alice --server prod-db --duration 8h
-```
+# 1. Dodaj osobę
+inside person add "Jan Kowalski" --ip 100.64.0.50
 
-**Jedno miejsce aby zobaczyć wszystko:**
-```
-http://gateway:5000
-```
+# 2. Dodaj serwer backendowy
+inside server add prod-db-01 --ip 10.0.1.100
 
-To tyle. Prosty koncept, potężna implementacja. 🏰
+# 3. Utwórz grant
+inside grant create jan.kowalski --server prod-db-01 --duration 8h
+
+# 4. Osoba może teraz wejść
+ssh jan.kowalski@gateway.firma.pl
+```
 
 ---
 
-*Zbudowane dla zespołów bezpieczeństwa, które cenią prostotę i audytowalność.*
+## 🎓 Dokumentacja
+
+- **[ROADMAP.md](ROADMAP.md)** - Plan rozwoju i historia wersji
+- **[DOCUMENTATION.md](DOCUMENTATION.md)** - Dokumentacja techniczna
+- **[README.md](README.md)** - Wersja angielska
+
+---
+
+## 💬 TL;DR
+
+**Inside w jednym zdaniu:**
+
+*Czasowe granty dla prawdziwych ludzi na bycie wewnątrz infrastruktury, z pełnym audytem i nagrywaniem sesji, wdrożone w godzinę.*
+
+**Kluczowe różnice:**
+
+- 👤 **Osoba ≠ username** - Odpowiedzialność dla ludzi, nie kont
+- ⏱ **Skoncentrowane na Stay** - Kto jest wewnątrz teraz, jak długo
+- 🎫 **Oparte na Grantach** - Konkretne pozwolenie, nie rola/grupa
+- 🚀 **Nieinwazyjne** - Bez agentów, bez zmian, wdrożenie w godzinę
+- 📜 **Pełny audyt** - Każde wejście, każdy stay, każda sesja nagrana
+
+**Jedna komenda żeby przyznać dostęp:**
+```bash
+inside grant alice --server prod-db --duration 8h
+```
+
+**Jedno miejsce żeby zobaczyć wszystko:**
+```
+Dashboard → Kto jest wewnątrz teraz
+```
+
+---
+
+**Projekt:** Inside
+**Repozytorium:** https://github.com/pawelmojski/inside
+**Status:** Produkcja (v1.8)
+**Licencja:** Komercyjna (opcje monetyzacji otwarte)

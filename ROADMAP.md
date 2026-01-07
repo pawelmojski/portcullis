@@ -1,4 +1,4 @@
-# Jump Host Project - Roadmap & TODO
+# Inside - Roadmap & TODO
 
 ## Current Status: v1.8 (Mega-Wyszukiwarka) - January 2026 ✅
 
@@ -88,43 +88,53 @@
 
 ## Project Vision
 
-Stworzenie kompletnego SSH/RDP jump hosta z:
-- ✅ Uwierzytelnianiem per source IP (DONE)
-- ✅ Czasowym przydzielaniem dostępów (DONE)
-- ✅ Mapowaniem użytkowników per source IP (DONE - multiple IPs supported)
-- ✅ Nagrywaniem sesji (DONE - SSH JSONL, RDP .pyrdp)
-- ✅ Live view sesji (DONE - 2s polling for SSH)
-- ⏳ Distributed architecture (v1.9 - IN PROGRESS)
-- ⏳ TPROXY transparent proxy (v1.9 - IN PROGRESS)
-- ⏳ CLI management tools (v2.0 - PLANNED)
-- ⏳ Dynamicznym zarządzaniem pulą IP (PARTIAL - manual allocation)
-- ⏳ Integracją z FreeIPA (TODO)
+**Inside: Control who can be inside your infrastructure, when, and for how long.**
+
+Core principles:
+- ✅ **Person ≠ username** - Identity is a person, not a system account (DONE)
+- ✅ **Grant-based access** - Time-limited permissions, not permanent roles (DONE)
+- ✅ **Stay-centric** - Track who is inside, not just connections (DONE)
+- ✅ **Entry points** - Multiple ways to get inside: SSH, RDP, HTTP (SSH/RDP DONE)
+- ✅ **Full audit** - Every entry, every stay, every session recorded (DONE)
+- ⏳ **Distributed** - Tower (control) + Gates (data planes) (v1.9 - IN PROGRESS)
+- ⏳ **TPROXY** - Transparent proxy mode (v1.9 - IN PROGRESS)
+- ⏳ **CLI tools** - curl-based management (v2.0 - PLANNED)
+- ⏳ **HTTP/HTTPS proxy** - Legacy devices web GUIs (v2.1 - PLANNED)
 
 ## Architecture Goal
 
 ```
-Client 100.64.0.X
+Person (100.64.0.X)
     ↓
-    Connect to: 10.0.160.150:22 (SSH) or :3389 (RDP)
+    Entry: ssh target-server (SSH :22) or mstsc target-server (RDP :3389)
     ↓
-Jump Host extracts:
-    - Source IP: 100.64.0.X (identifies user)
-    - Destination IP: 10.0.160.150 (identifies backend server)
+Inside Gateway extracts:
+    - Source IP: 100.64.0.X (identifies person)
+    - Target: target-server (identifies backend server)
     ↓
-Access Control V2:
-    - User from source IP has policy grant to backend?
-    - Policy scope: group/server/service level?
-    - Policy still valid (temporal)?
-    - Protocol allowed (ssh/rdp/both)?
-    - SSH login allowed (if SSH)?
+Grant Check:
+    - Person has valid grant to target?
+    - Grant allows protocol (ssh/rdp)?
+    - Grant allows this server?
+    - Grant allows this SSH username?
+    - Grant time window active?
     ↓
-Proxy forwards to backend:
+If approved:
+    - Create or join stay (person is now inside)
+    - Create session within stay (TCP connection)
+    - Proxy to backend server
+    - Record everything (terminal log / RDP video)
+    ↓
+Backend Server:
     - SSH: 10.30.0.200:22
     - RDP: 10.30.0.140:3389
     ↓
-Session recorded to disk (JSONL for SSH, .pyrdp for RDP)
-Session tracked in database (real-time monitoring)
-Live view available in web GUI
+Stay tracked in database:
+    - Person: "Paweł Mojski"
+    - Grant: #123 (prod-db, 8h)
+    - Sessions: [session-001, session-002]
+    - Recordings: [term-001.log, rdp-001.mp4]
+    - Record: Immutable audit entry
 ```
 
 ---
